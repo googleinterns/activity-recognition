@@ -67,50 +67,6 @@ public class CsvParser {
 
   /**
    * Extracts metadata from dataset.csv file
-   *
-   * @param pb the ProtocolBuffer to extract the metadata to
-   */
-  public void setMetadata(ProtocolBuffer pb) {
-    //TODO: add in error checking
-    Scanner scan = null;
-    try {
-      scan = new Scanner(file);
-      String line = scan.nextLine();
-      while (line.charAt(0) == '#') {
-        line = scan.nextLine();
-      }
-      do {
-        String[] lineArr = line.split(",");
-        String ytid = lineArr[0];
-        int start = (int) Double.parseDouble(lineArr[1]);
-        int end = (int) Double.parseDouble(lineArr[2]);
-        String labels = lineArr[3];
-        String[] labelsList = labels.split(",");
-        String url = "https://youtube.com/watch?v=" + ytid;
-
-        pb.getIdToUrlMap().put(ytid, url);
-        pb.getIdToStartMap().put(ytid, start);
-        pb.getIdToEndMap().put(ytid, end);
-        ArrayList<String> al = new ArrayList<>();
-        for (int i = 0; i < labelsList.length; i++) {
-          al.add(labelsList[i]);
-        }
-        pb.getIdToLabelsMap().put(ytid, al);
-          if (scan.hasNext()) {
-              line = scan.nextLine();
-          }
-      } while (scan.hasNext());
-    } catch (IOException io) {
-      io.printStackTrace();
-    } finally {
-        if (scan != null) {
-            scan.close();
-        }
-    }
-  }
-
-  /**
-   * Extracts metadata from dataset.csv file
    */
   public void csvToProtoMap() {
     Scanner scan = null;
