@@ -1,0 +1,11 @@
+# Compiled Source #
+###################
+*.class
+
+# IDE Generated Files #
+#######################
+*.iml
+
+# Bazel Generated Files #
+#########################
+bazel*

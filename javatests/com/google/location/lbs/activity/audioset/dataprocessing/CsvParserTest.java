@@ -71,7 +71,7 @@ public class CsvParserTest {
     int count = parser.getIdToProtoMap().get("--PJHxphWEs").getLabelsCount();
     String[] labelsList = {"m/09x9r", "/t/dd00088"};
     for (int i = 0; i < count; i++) {
-      assertEquals(labelsList[i], parser.getIdToProtoMap().get("--PJHxphWEs").getLabels(i));
+      assertEquals(labelsList[i], parser.getIdToProtoMap().get("--PJHxphWEs").getLabels(i).getLabel());
     }
   }
 
@@ -80,7 +80,7 @@ public class CsvParserTest {
     int count = parser.getIdToProtoMap().get("2KwwQHit0-Q").getLabelsCount();
     String[] labelsList = {"/m/0l156k"};
     for (int i = 0; i < count; i++) {
-      assertEquals(labelsList[i], parser.getIdToProtoMap().get("2KwwQHit0-Q").getLabels(i));
+      assertEquals(labelsList[i], parser.getIdToProtoMap().get("2KwwQHit0-Q").getLabels(i).getLabel());
     }
   }
 
@@ -89,7 +89,7 @@ public class CsvParserTest {
     int count = parser.getIdToProtoMap().get("zzya4dDVRLk").getLabelsCount();
     String[] labelsList = {"/m/01v_m0", "/m/0hdsk"};
     for (int i = 0; i < count; i++) {
-      assertEquals(labelsList[i], parser.getIdToProtoMap().get("zzya4dDVRLk").getLabels(i));
+      assertEquals(labelsList[i], parser.getIdToProtoMap().get("zzya4dDVRLk").getLabels(i).getLabel());
     }
   }
 }
