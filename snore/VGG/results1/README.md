@@ -6,9 +6,11 @@ model = keras.Sequential([
       keras.layers.Dense(128, activation=activation),
       keras.layers.Dense(1)
   ])
+  
 model.compile(optimizer=optimizer,
          loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
          metrics=metrics)
+         
 history = model.fit(train_x, train_y,
                epochs=epochs,
                validation_data=(val_x, val_y),
@@ -45,8 +47,6 @@ _**For a closer observation, use find_pic_with_keyword() function in Model_on_VG
 <br>
 
 ## Observations
-ftrl gives more stable acc.
-nadam gives very unstable acc.
 
 |              	| elu                                            	| exponential     	| relu                     	| selu                               	| sigmoid                            	| softmax               	| softplus                        	| softsign                        	| tanh                            	|
 |--------------	|------------------------------------------------	|-----------------	|--------------------------	|------------------------------------	|------------------------------------	|-----------------------	|---------------------------------	|---------------------------------	|---------------------------------	|
@@ -70,7 +70,7 @@ nadam gives very unstable acc.
 6. Optimizer **sgd** most time is no better than random guess. should be dropped.
 7. Optimezer **adagrad, adam, adamax, ftrl, nadam, rmsprop** generally works better. Specifically, **ftrl** gives very stable results.
 8. Overall, all training appear to be overfitted and unstable. Should consider to increase the size of validation set by reshuffling, and increase the total data for training by increase ratio.
-9. **Adam with relu** could be considered as the baseline.
+9. **Adam with relu** could be considered as the **baseline**.
 
 ## Future work:
 1. Increase the size of validation set, comparing to the size of training set. Should mediate the unstable val_acc.
