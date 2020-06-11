@@ -9,5 +9,5 @@ If ratio is 10, we would train 2213 'snoring' with 2213 * 10 'nonsnoring'.
 Same ratio appied to validation and test data.
 
 Name follows the pattern: 
-<ratio of label and unlabel data> _ <activation> _ <optimizer> _ <metrics> _ <epochs>
+\<ratio of label and unlabel data\> _ \<activation\> _ \<optimizer\> _ \<metrics\> _ \<epochs\>
 
