@@ -1,6 +1,7 @@
 load("@rules_java//java:defs.bzl", "java_binary", "java_lite_proto_library", "java_proto_library")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 
+
 proto_library(
   name = "incomplete_example_proto",
   srcs = ["java/com/google/location/lbs/activity/audioset/dataprocessing/incomplete-example.proto"],
@@ -24,7 +25,7 @@ java_binary(
   name = "video_downloader_java",
   srcs = ["java/com/google/location/lbs/activity/audioset/dataprocessing/VideoDownloader.java"],
   main_class = "VideoDownloader",
-  deps = [":csv_parser_java"],
+  deps = [":csv_parser_java", ":download_sh"],
 )
 
 java_binary(
@@ -32,4 +33,9 @@ java_binary(
   srcs = ["java/com/google/location/lbs/activity/audioset/dataprocessing/FeatureExtractor.java"],
   main_class = "FeatureExtractor",
   deps = [":video_downloader_java"],
+)
+
+sh_binary(
+  name = "download_sh",
+  srcs = ["java/com/google/location/lbs/activity/audioset/dataprocessing/download.sh"],
 )
