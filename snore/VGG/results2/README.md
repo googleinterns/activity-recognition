@@ -73,6 +73,7 @@ Optimiaers: **adagrad, adam, adamax, ftrl, nadam, rmsprop**
 3. While trying to increase size of data by increasing ratio of label:unlabel, should keep an eye on imbalance data problem. Could probably consider using other metrics, such as precision, recall, or F1 score.
 4. Consider increasing size of labeled data by synthesizing or oversampling.
 5. Modify structure of neural network, for example, add one more layer.
+6. Epochs could be at range 10 - 40.
 
 
 
