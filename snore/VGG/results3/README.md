@@ -1,4 +1,4 @@
-# Model based on VGG, Second Trial
+# Model based on VGG, Third Trial
 
 ```python3
 model = keras.Sequential([
@@ -17,18 +17,17 @@ history = model.fit(train_x, train_y,
                 verbose=1)
 ```
 
-Specital thanks to Youngmin Cho for advices.
-
 ## Description:  
 <br>
-This folder stores SECOND training results based on VGG features with different configurations.  
-This second trial increased ratio of labeled and unlabeled data trying to mediate overfit. By sacrificing in data balance, we introduce more data into this model.  
+This folder stores THIRD training results based on VGG features with different configurations.  
+This third trial, before feed embeddings into model for training, performs normalization to reform the original feature ranges from [0, 255] to [0, 1].
 
 **The metrics used 'accuracy'.**  
 
 If ratio is 1, we would train 2213 'snoring' with 2213 'nonsnoring'.  
 If ratio is 10, we would train 2213 'snoring' with 2213 * 10 'nonsnoring'.  
-Same ratio appied to validation and test data.
+Same ratio appied to validation and test data.  
+**We use BALANCED data for training in this trail.**  
 
 <br> 
 
@@ -37,7 +36,7 @@ Train : val : test = 8 : 1 : 1.
 <br>
 
 __Name follows the pattern__:   
-\<ratio of label and unlabel data\> _ \<activation\> _ \<optimizer\> _ \<metrics\> _ \<epochs\>
+\<trial num\> _ \<ratio of label and unlabel data\> _ \<activation\> _ \<optimizer\> _ \<metrics\> _ \<epochs\>
 
 _**For a closer observation, use find_pic_with_keyword() function in Model_on_VGG.ipynb.**_
 
@@ -47,33 +46,26 @@ _**For a closer observation, use find_pic_with_keyword() function in Model_on_VG
 
 ### Activations and optimizers:  
 
-Activations: **elu, relu, selu, sigmoid, softsign, tanh**  
-Optimiaers: **adagrad, adam, adamax, ftrl, nadam, rmsprop**  
+Activations: **elu, exponential, relu, selu, sigmoid, softmax, softplus, softsign, tanh**  
+Optimiaers: **adadelta, adagrad, adam, adamax, ftrl, nadam, rmsprop, sgd**  
 
-1. **Elu with adam / adamax / nadam / rmsprop** combinations give fluctuate, nonincreasing results, seems to still doing random guessing for many times. **Elu** turning point appears before **30 epochs**.
-2. **Relu with adam / adamax / nadam / rmsprop** combinations give fluctuate, nonincreasing results, seems to still doing random guessing for many times. **Relu** turning point appears before **30 epochs**.
-3. **Selu with adamax / nadam / rmsprop** combinations give fluctuate, nonincreasing results, seems to still doing random guessing for many times. **Relu** turning point appears before **30 epochs**.
-4. **Sigmoid with adam / nadam** combinations give fluctuate, nonincreasing results. Recommend for further testing. **Sigmoid** turning point appears around **10 epochs**. But when combined with **adagrad**, it kept going beyond 100 epochs.
-5. **Softsign witn adam / nadam** combinations give fluctuate, nonincreasing results. Recommend for further testing. **Softsign** turning point appears around **10 epochs**. But when combined with **adagrad**, it kept going beyond 100 epochs.
-6. **Tanh witn adam / nadam** combinations give fluctuate, nonincreasing results. Recommend for further testing. **Tanh** turning point appears around **30 epochs**. But when combined with **adagrad**, it kept going beyond 100 epochs.
-7. **Adagrad** gives relatively low acc.
-8. **Adamax** has a big overfit problem even with increased ratio.
-8. **Rmsprop with elu, relu, selu** seems giving more overfitting results, even after increasing the ratio of label:unlabel. Mostly over 10% acc on ratio 1, and over 5% acc on ratio 10.
+_Considering the possible differences in training before/after normalization, we use all options as we did in trial1, and gradually remove unwanted options from this stage._    
+
+|              	| elu                       	| exponential                	| relu                       	| selu                       	| sigmoid                   	| softmax             	| softplus            	| softsign            	| tanh             	|
+|--------------	|---------------------------	|----------------------------	|----------------------------	|----------------------------	|---------------------------	|---------------------	|---------------------	|---------------------	|------------------	|
+| __adadelta__ 	| Half ok, need more epochs 	| Half ok, need more epochs  	| Half ok, need more epochs  	| Half ok, need more epochs  	| Not ok                    	| Not ok, val_acc=50% 	| Not ok              	| Not ok              	| Not ok           	|
+| __adagrad__  	| Ok                        	| Ok                         	| Ok                         	| Ok                         	| Half ok, need more epochs 	| Not ok, val_acc=50% 	| Ok                  	| Ok                  	| Half ok, overfit 	|
+| __adam__     	| Half ok, unstable         	| Half ok, unstable, overfit 	| Half ok, unstable, overfit 	| Half ok, unstable          	| Ok                        	| Ok                  	| Half ok, unstable   	| Half ok, unstable   	| Not ok           	|
+| __adamax__   	| Ok                        	| Ok                         	| Ok                         	| Ok, fluctuate a bit        	| Ok                        	| Ok                  	| Ok                  	| Ok                  	| Half ok, overfit 	|
+| __ftrl__     	| Not ok, val_acc=50%       	| Weird output, check it out 	| Not ok, val_acc=50%        	| Weird output, check it out 	| Not ok, val_acc=50%       	| Not ok, val_acc=50% 	| Not ok, val_acc=50% 	| Not ok, val_acc=50% 	| Half ok, overfit 	|
+| __nadam__    	| Half ok, unstable         	| Half ok, unstable, overfit 	| Half ok, overfit           	| Half ok, unstable          	| Ok                        	| Ok                  	| Ok                  	| Half ok, unstable   	| Half ok, overfit 	|
+| __rmsprop__  	| Half ok, unstable         	| Half ok, unstable          	| Half ok, unstable, overfit 	| Half ok, unstable!         	| Ok                        	| Ok                  	| Half ok, unstable!  	| Half ok, unstable!  	| Half ok, overfit 	|
+| __sgd__      	| Ok                        	| Ok                         	| Ok                         	| Ok                         	| Ok, better if more epochs 	| Not ok, val_acc=50% 	| Ok                  	| Ok                  	| Half ok, overfit 	|
 
 
 ## Summary:
-1. Increasing ratio of labeled:unlabeled indeed seems to increase accuracy and mediate overfitting. But need to be suspicious and cautious about imbalanced data problem.
-2. Activations **sigmoid, softsign, and tanh** are more stable, and seems to be better activation choices.
-3. Optimizers **adagrad, ftrl** would be better choices. Especially **ftrl** works fine with almost all activations.
-4. Fluctuation of val_acc still exists.
-
-## Further work:
-1. Try to do normalization on feature sets.
-2. Focus on better activation and optimizers.
-3. While trying to increase size of data by increasing ratio of label:unlabel, should keep an eye on imbalance data problem. Could probably consider using other metrics, such as precision, recall, or F1 score.
-4. Consider increasing size of labeled data by synthesizing or oversampling.
-5. Modify structure of neural network, for example, add one more layer.
-6. Epochs could be at range 10 - 40.
+1. Activations **elu, exponential, relu, selu, sigmoid, softplus, softsign** seems better.
+2. Optimizers **adagrad, adamax, sgd** would be better choices.
 
 
 
