@@ -1,7 +1,12 @@
+package com.google.location.lbs.activity.audioset.dataprocessing;
+
 import static org.junit.Assert.assertEquals;
-
 import org.junit.Test;
+import org.junit.Before;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
+@RunWith(JUnit4.class)
 public class CsvParserTest {
 
   CsvParser parser;
@@ -93,3 +98,4 @@ public class CsvParserTest {
     }
   }
 }
+© 2020 GitHub, In

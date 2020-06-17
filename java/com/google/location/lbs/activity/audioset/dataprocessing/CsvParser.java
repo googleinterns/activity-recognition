@@ -1,41 +1,47 @@
+package com.google.location.lbs.activity.audioset.dataprocessing;
+
 import java.io.File;
 import java.io.IOException;
 import java.util.Scanner;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.io.FileWriter;
+import com.google.location.lbs.activity.audioset.dataprocessing.IncompleteExample;
 
 /**
- * CSV Class
+ * CsvParser Class
  *
- * <p>CSV is a class for the reading of a dataset in a csv format.
- *
- * @author Carver Forbes
- * @version 0.1
+ * <p>CsvParser is a class for the reading of a dataset in a csv format.
  */
-public class CsvParser {
+public final class CsvParser {
 
-  private File file;
-  private ArrayList<String> ytidList;
-  private HashMap<String, IncompleteExample.Example> idToProtoMap;
-  private HashMap<String, String> idToUrlMap;
+  private File csv;
+  private File bashScript;
+  private List<String> videoIdList;
+  private Map<String, Example> idToProtoMap;
 
   private final boolean debug = true;
 
   /**
-   * CSV constructor
+   * CsvParser constructor
    *
    * @param pathname the pathname for the csv file to be read
    * @throws IllegalArgumentException if the pathname is incorrect
    */
   public CsvParser(String pathname) {
-    file = new File(pathname);
-    if (!file.exists()) {
+    csv = new File(pathname);
+    if (!csv.exists()) {
       throw new IllegalArgumentException(String.format("This file does not exist: %s", pathname));
     }
-    ytidList = new ArrayList<>();
+    bashScript = new File(pathname);
+    if (!bashScript.exists()) {
+      throw new IllegalArgumentException(String.format("This file does not exist: %s", pathname));
+    }
+    videoIdList = new ArrayList<>();
     idToProtoMap = new HashMap<>();
-    idToUrlMap = new HashMap<>();
   }
 
   /** Tester Function to print 5 YouTube Links */
@@ -43,20 +49,20 @@ public class CsvParser {
     // prints youtube links
     Scanner scan = null;
     try {
-      scan = new Scanner(file);
+      scan = new Scanner(csv);
       String line = scan.nextLine();
       while (line.charAt(0) == '#') {
         line = scan.nextLine();
       }
       // while (scan.hasNext()) {
-      //   String ytid = line.split(",")[0];
-      //   String url = "https://youtube.com/watch?v=" + ytid;
+      //   String videoId = line.split(",")[0];
+      //   String url = "https://youtube.com/watch?v=" + videoId;
       //   System.out.println(url);
       //   line = scan.nextLine();
       // }
       for (int i = 0; i < 5; i++) {
-        String ytid = line.split(",")[0];
-        String url = "https://youtube.com/watch?v=" + ytid;
+        String videoId = line.split(",")[0];
+        String url = "https://youtube.com/watch?v=" + videoId;
         System.out.println(url);
         line = scan.nextLine();
       }
@@ -71,10 +77,10 @@ public class CsvParser {
 
   /** Extracts metadata from dataset.csv file */
   public void csvToProtoMap() {
-    if (debug) System.out.println("in the csvToProtoMap method");
+    if (debug) {System.out.println("in the csvToProtoMap method");}
     Scanner scan = null;
     try {
-      scan = new Scanner(file);
+      scan = new Scanner(csv);
       int count = 0;
       String line = scan.nextLine();
       count++;
@@ -84,12 +90,12 @@ public class CsvParser {
       }
       do {
         createProto(line);
-        if (debug) System.out.printf("At line %d\n", count);
+        if (debug) {System.out.printf("At line %d\n", count);}
         line = scan.nextLine();
         count++;
       } while (scan.hasNext());
       createProto(line);
-      if (debug) System.out.printf("At line %d\n", count);
+      if (debug) {System.out.printf("At line %d\n", count);}
     } catch (IOException io) {
       io.printStackTrace();
     } finally {
@@ -105,44 +111,43 @@ public class CsvParser {
    * @param csvLine
    */
   public void createProto(String csvLine) {
-    if (debug) System.out.println("in the createProto method");
+    if (debug) {System.out.println("in the createProto method");}
     String[] lineArr = csvLine.split(",");
-    String ytid = lineArr[0];
-    ytidList.add(ytid);
-    String url = "https://youtube.com/watch?v=" + ytid;
-    idToUrlMap.put(ytid, url);
+    String videoId = lineArr[0];
+    videoIdList.add(videoId);
+    String url = "https://youtube.com/watch?v=" + videoId;
+    String bashLine = "youtube-dl --id -x --audio-format wav" + url + "\n";
+    FileWriter writer = new FileWriter(bashScript);
+    writer.write(bashLine);
+    writer.flush();
+    writer.close();
     int start = (int) Double.parseDouble(lineArr[1]);
     int end = (int) Double.parseDouble(lineArr[2]);
     String[] labelsList = Arrays.copyOfRange(lineArr, 3, lineArr.length);
-    ArrayList<IncompleteExample.Example.Label> protoLabels = new ArrayList<>();
+    ArrayList<Example.Label> protoLabels = new ArrayList<>();
     int len = labelsList.length;
     for (int i = 0; i < len; i++) {
       labelsList[i] = labelsList[i].replace("\"", "");
       labelsList[i] = labelsList[i].trim();
-      IncompleteExample.Example.Label protoLabel =
-          IncompleteExample.Example.Label.newBuilder().setLabel(labelsList[i]).build();
+      Example.Label protoLabel = Example.Label.newBuilder().setLabel(labelsList[i]).build();
       protoLabels.add(protoLabel);
     }
-    IncompleteExample.Example proto =
-        IncompleteExample.Example.newBuilder()
-            .setYtid(ytid)
-            .setStart(start)
-            .setEnd(end)
-            .addAllLabels(protoLabels)
-            .build();
-    idToProtoMap.put(ytid, proto);
+    Example proto =
+      Example.newBuilder()
+        .setVideoId(videoId)
+        .setStart(start)
+        .setEnd(end)
+        .addAllLabels(protoLabels)
+        .build();
+    idToProtoMap.put(videoId, proto);
   }
 
-  public HashMap<String, String> getIdToUrlMap() {
-    return idToUrlMap;
-  }
-
-  public HashMap<String, IncompleteExample.Example> getIdToProtoMap() {
+  public Map<String, Example> getIdToProtoMap() {
     return idToProtoMap;
   }
 
-  public ArrayList<String> getYtidList() {
-    return ytidList;
+  public List<String> getVideoIdList() {
+    return videoIdList;
   }
 
   /**
@@ -156,19 +161,19 @@ public class CsvParser {
         new CsvParser(
             "java/com/google/location/lbs/activity/audioset/dataprocessing/datasets/balanced_train_segments.csv");
     parser.csvToProtoMap();
-    String url = parser.getIdToUrlMap().get("--PJHxphWEs");
+    String url = "https://youtube.com/watch?v=" + "--PJHxphWEs";
     if ("https://youtube.com/watch?v=--PJHxphWEs".equals(url)) {
       System.out.println("Passed");
     } else {
       System.out.println("Failed");
     }
-    url = parser.getIdToUrlMap().get("2KwwQHit0-Q");
+    url = "https://youtube.com/watch?v=" + "2KwwQHit0-Q";
     if ("https://youtube.com/watch?v=2KwwQHit0-Q".equals(url)) {
       System.out.println("Passed");
     } else {
       System.out.println("Failed");
     }
-    url = parser.getIdToUrlMap().get("zzya4dDVRLk");
+    url = "https://youtube.com/watch?v=" + "zzya4dDVRLk";
     if ("https://youtube.com/watch?v=zzya4dDVRLk".equals(url)) {
       System.out.println("Passed");
     } else {
@@ -240,5 +245,6 @@ public class CsvParser {
         System.out.printf("Failed at element %d\n", i);
       }
     }
+    VideoDownloader.downloadList(parser.videoIdList);
   }
 }
