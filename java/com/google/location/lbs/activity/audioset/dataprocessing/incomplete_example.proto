@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_outer_classname = "IncompleteExample";
+option java_package = "com.google.location.lbs.activity.audioset.dataprocessing";
+
+message Example {
+    string videoId = 1;         // the YouTube video id of the audio sample
+    int32 start = 2;            // the start time in seconds of the labelled audio segment
+    int32 end = 3;              // the end time in seconds of the labelled audio segment
+
+    message Label {
+        string label = 1;       // the label of the sample
+    }
+
+    repeated Label labels = 4;  // the one or more labels for the audio segment
+}
