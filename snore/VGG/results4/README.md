@@ -1,4 +1,4 @@
-# Model based on VGG, Third Trial
+# Model based on VGG, Fourth Trial
 
 ```python3
 model = keras.Sequential([
@@ -18,9 +18,13 @@ history = model.fit(train_x, train_y,
 ```
 
 ## Description:  
+
+__A bug is fixed, and now we have 10 times more data to train!!!__  
+
 <br>
-This folder stores THIRD training results based on VGG features with different configurations.  
-This third trial, before feed embeddings into model for training, performs normalization to reform the original feature ranges from [0, 255] to [0, 1].
+This folder stores FOURTH training results based on VGG features with different configurations.  
+This fourth trial, before feed embeddings into model for training, performs normalization to reform the original feature ranges from [0, 255] to [0, 1].  
+
 
 **The metrics used 'accuracy'.**  
 
@@ -31,7 +35,8 @@ Same ratio appied to validation and test data.
 
 <br> 
 
-Train : val : test = 8 : 1 : 1.
+__Train : val : test = 7 : 2 : 1__  
+__Train: 35850, val: 10228, test: 5105__  
 
 <br>
 
@@ -46,26 +51,13 @@ _**For a closer observation, use find_pic_with_keyword() function in Model_on_VG
 
 ### Activations and optimizers:  
 
-Activations: **elu, exponential, relu, selu, sigmoid, softmax, softplus, softsign, tanh**  
-Optimiaers: **adadelta, adagrad, adam, adamax, ftrl, nadam, rmsprop, sgd**  
-
-_Considering the possible differences in training before/after normalization, we use all options as we did in trial1, and gradually remove unwanted options from this stage._    
-
-|              	| elu                       	| exponential                	| relu                       	| selu                       	| sigmoid                   	| softmax             	| softplus            	| softsign            	| tanh             	|
-|--------------	|---------------------------	|----------------------------	|----------------------------	|----------------------------	|---------------------------	|---------------------	|---------------------	|---------------------	|------------------	|
-| __adadelta__ 	| Half ok, need more epochs 	| Half ok, need more epochs  	| Half ok, need more epochs  	| Half ok, need more epochs  	| Not ok                    	| Not ok, val_acc=50% 	| Not ok              	| Not ok              	| Not ok           	|
-| __adagrad__  	| Ok                        	| Ok                         	| Ok                         	| Ok                         	| Half ok, need more epochs 	| Not ok, val_acc=50% 	| Ok                  	| Ok                  	| Half ok, overfit 	|
-| __adam__     	| Half ok, unstable         	| Half ok, unstable, overfit 	| Half ok, unstable, overfit 	| Half ok, unstable          	| Ok                        	| Ok                  	| Half ok, unstable   	| Half ok, unstable   	| Not ok           	|
-| __adamax__   	| Ok                        	| Ok                         	| Ok                         	| Ok, fluctuate a bit        	| Ok                        	| Ok                  	| Ok                  	| Ok                  	| Half ok, overfit 	|
-| __ftrl__     	| Not ok, val_acc=50%       	| Weird output, check it out 	| Not ok, val_acc=50%        	| Weird output, check it out 	| Not ok, val_acc=50%       	| Not ok, val_acc=50% 	| Not ok, val_acc=50% 	| Not ok, val_acc=50% 	| Half ok, overfit 	|
-| __nadam__    	| Half ok, unstable         	| Half ok, unstable, overfit 	| Half ok, overfit           	| Half ok, unstable          	| Ok                        	| Ok                  	| Ok                  	| Half ok, unstable   	| Half ok, overfit 	|
-| __rmsprop__  	| Half ok, unstable         	| Half ok, unstable          	| Half ok, unstable, overfit 	| Half ok, unstable!         	| Ok                        	| Ok                  	| Half ok, unstable!  	| Half ok, unstable!  	| Half ok, overfit 	|
-| __sgd__      	| Ok                        	| Ok                         	| Ok                         	| Ok                         	| Ok, better if more epochs 	| Not ok, val_acc=50% 	| Ok                  	| Ok                  	| Half ok, overfit 	|
+Activations: **elu, exponential, relu, selu, sigmoid, softplus, softsign**  
+Optimiaers: **adagrad, adam, adamax, sgd**  
 
 
 ## Summary:
-1. Activations **elu, exponential, relu, selu, sigmoid, softplus, softsign** seems better.
-2. Optimizers **adagrad, adamax, sgd** would be better choices.
+1. **Relu, adam** does not give good results.
+2. In trial3, val_acc reached ceilling 90%, the same applied to trial4, the highest accuracy is < 90%. Perhaps add more data won't do any good. That is the limitation of VGG feature.
 
 
 
