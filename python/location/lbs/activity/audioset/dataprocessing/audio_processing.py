@@ -20,7 +20,6 @@ import sys
 import numpy as np
 import librosa
 import argparse
-import numpy as np
 
 file_structure = "python/location/lbs/activity/audioset/dataprocessing/"
 referDoc = "ReferDoc/"
@@ -49,8 +48,8 @@ def parse_csv(csv_file):
       r = ','.join(row)
       if '#' not in r:
         r_lst = r.split(',')
-        url, start_time, end_time = r_lst[0], float(r_lst[2]), float(r_lst[4])
-        audio_list.append([url, start_time, end_time])
+        video_id, start_time, end_time = r_lst[0], float(r_lst[2]), float(r_lst[4])
+        audio_list.append([video_id, start_time, end_time])
   return audio_list
 
 
@@ -89,7 +88,7 @@ def download(dest_dir, video_id, redo):
   # downloaded unless the -r, --redo flag has been passed
   already_downloaded = isfile(dest_dir + '/sliced_' + video_id + '.wav')
   print(already_downloaded and not redo)
-  if already_downloaded: # implement redo option
+  if already_downloaded: # TODO: implement redo option
     print('Already processed video')
     return False
 
@@ -112,7 +111,7 @@ def download(dest_dir, video_id, redo):
       return False
 
 
-def chop_audio(dest_dir, video_id, start_time, end_time):
+def chop_audio(dest_dir, video_id, start_time, end_time): # TODO: breaking if there is more than one file in /tmp
   # Chop the whole audio,
   # and save only the target part labelled by start_time and end_time.
   # Then remove the original audio.
@@ -149,7 +148,7 @@ def extract_features_from_list(src_dir):
 def extract_features(video_id, src_dir):
   # Extract features from specified audio segments from given video_id
   # input: str src_dir
-  # output: None
+  # output: boolean
 
   # Extract the following features from each downloaded 10 second audio segment using librosa
   # Extracts the following features: chroma_stft, chroma_cqt, chroma_cens, melspectogram,
@@ -159,6 +158,8 @@ def extract_features(video_id, src_dir):
   f_dict = {}
   prefix = "sliced_"
   suffix = ".wav"
+  if not isfile(src_dir + '/sliced_' + video_id + '.wav'):
+    return False
   # extract chroma_stft
   y, sr = librosa.load(src_dir + "/" + prefix + video_id + suffix)
   f_dict["chroma_stft"] = librosa.feature.chroma_stft(y, sr)
@@ -190,14 +191,15 @@ def extract_features(video_id, src_dir):
   f_dict["zero_crossing_rate"] = librosa.feature.zero_crossing_rate(y, sr)
   feature_dict[video_id] = f_dict
   print("extracted features")
+  return True
 
 
 def create_csv_from_list():
   # Creates a csv file to input into TensorFlow with the following structure: is_gunshot, video_id, feature list
   # input: None
   # output: None
-  with open("tfdataset.csv", 'w', newline='') as csvfile:
-    csv_writer = csv.writer(csvfile, delimiter=':', quoting=csv.QUOTE_MINIMAL)
+  with open("tfdataset.csv", 'w', newline='') as outcsv:
+    csv_writer = csv.writer(outcsv, delimiter=':', quoting=csv.QUOTE_MINIMAL)
     csv_writer.writerow(
       ['label', 'video_id', 'chroma_stft', 'chroma_cqt', 'chroma_cens', 'melspectrogram', 'mfcc', 'rms',
        'spectral_centroid', 'spectral_bandwidth', 'spectral_contrast', 'spectral_flatness', 'spectral_rolloff',
@@ -205,34 +207,22 @@ def create_csv_from_list():
     for key in feature_dict:
       video_id = key
       f_dict = feature_dict.get(key)
-      write_row(csv_writer, video_id, f_dict)
-
-
-def write_row(csv_writer, video_id, f_dict):
-  csv_writer.writerow([video_id] + [delete_outer_list(f_dict.get('chroma_stft').tolist())]
-                      + [delete_outer_list(f_dict.get('chroma_cqt').tolist())]
-                      + [delete_outer_list(f_dict.get('chroma_cens').tolist())]
-                      + [delete_outer_list(f_dict.get('melspectrogram').tolist())]
-                      + [delete_outer_list(f_dict.get('mfcc').tolist())]
-                      + [delete_outer_list(f_dict.get('rms').tolist())]
-                      + [delete_outer_list(f_dict.get('spectral_centroid').tolist())]
-                      + [delete_outer_list(f_dict.get('spectral_bandwidth').tolist())]
-                      + [delete_outer_list(f_dict.get('spectral_contrast').tolist())]
-                      + [delete_outer_list(f_dict.get('spectral_flatness').tolist())]
-                      + [delete_outer_list(f_dict.get('spectral_rolloff').tolist())]
-                      + [delete_outer_list(f_dict.get('poly_features').tolist())]
-                      + [delete_outer_list(f_dict.get('tonnetz').tolist())]
-                      + [delete_outer_list(f_dict.get('zero_crossing_rate').tolist())])
-
-
-def setup_output_csv():
-  with open("tfdataset.csv", 'w', newline='') as csvfile:
-    csv_writer = csv.writer(csvfile, delimiter=':', quoting=csv.QUOTE_MINIMAL)
-    csv_writer.writerow(
-      ['label', 'video_id', 'chroma_stft', 'chroma_cqt', 'chroma_cens', 'melspectrogram', 'mfcc', 'rms',
-       'spectral_centroid', 'spectral_bandwidth', 'spectral_contrast', 'spectral_flatness', 'spectral_rolloff',
-       'poly_features', 'tonnetz', 'zero_crossing_rate'])
-    return csv_writer
+      # TODO: Enable selection of labels to set as true
+      label = 1
+      csv_writer.writerow([video_id] + [delete_outer_list(f_dict.get('chroma_stft').tolist())]
+                          + [delete_outer_list(f_dict.get('chroma_cqt').tolist())]
+                          + [delete_outer_list(f_dict.get('chroma_cens').tolist())]
+                          + [delete_outer_list(f_dict.get('melspectrogram').tolist())]
+                          + [delete_outer_list(f_dict.get('mfcc').tolist())]
+                          + [delete_outer_list(f_dict.get('rms').tolist())]
+                          + [delete_outer_list(f_dict.get('spectral_centroid').tolist())]
+                          + [delete_outer_list(f_dict.get('spectral_bandwidth').tolist())]
+                          + [delete_outer_list(f_dict.get('spectral_contrast').tolist())]
+                          + [delete_outer_list(f_dict.get('spectral_flatness').tolist())]
+                          + [delete_outer_list(f_dict.get('spectral_rolloff').tolist())]
+                          + [delete_outer_list(f_dict.get('poly_features').tolist())]
+                          + [delete_outer_list(f_dict.get('tonnetz').tolist())]
+                          + [delete_outer_list(f_dict.get('zero_crossing_rate').tolist())])
 
 
 def delete_outer_list(alist):
@@ -241,22 +231,55 @@ def delete_outer_list(alist):
   return alist
 
 
-def main(csv_file, redo):
+def create_csv_linear(csv_file, redo):
   audio_list = parse_csv(file_structure + referDoc + csv_file)
   download_from_list(file_structure + 'audio_balanced_train', audio_list, redo)
   extract_features_from_list(file_structure + 'audio_balanced_train')
   create_csv_from_list()
 
 
-  # csv_writer = setup_output_csv()
-  # for video_id, start_time, end_time in audio_list:
-  #   success = download(file_structure + 'audio_balanced_train', video_id, redo)
-  #   if success:
-  #     chop_audio(file_structure + 'audio_balanced_train', video_id, start_time, end_time)
-  #     extract_features(video_id, file_structure + 'audio_balanced_train')
-  # create_csv_from_list()
+def create_csv_parallel(csv_file, redo):
+  csv_file_temp = file_structure + referDoc + csv_file
+  with open(csv_file_temp, 'r', newline='') as csvfile:
+    with open('tfdataset.csv', 'w', newline='') as outcsv:
+      csv_writer = csv.writer(outcsv, delimiter=':', quoting=csv.QUOTE_MINIMAL)
+      csv_writer.writerow(
+        ['label', 'video_id', 'chroma_stft', 'chroma_cqt', 'chroma_cens', 'melspectrogram', 'mfcc', 'rms',
+         'spectral_centroid', 'spectral_bandwidth', 'spectral_contrast', 'spectral_flatness', 'spectral_rolloff',
+         'poly_features', 'tonnetz', 'zero_crossing_rate'])
+      info = csv.reader(csvfile, delimiter=' ', quotechar='|')
+      for row in info:
+        r = ','.join(row)
+        if '#' not in r: # passes header rows
+          r_lst = r.split(',')
+          video_id, start_time, end_time = r_lst[0], float(r_lst[2]), float(r_lst[4])
+          success = download(file_structure + 'audio_balanced_train', video_id, redo)
+          if success:
+            chop_audio(file_structure + 'audio_balanced_train', video_id, start_time, end_time)
+          success = extract_features(video_id, file_structure + 'audio_balanced_train')
+          print('Feature Extraction was successful:')
+          print(success)
+          if success:
+            f_dict = feature_dict.get(video_id)
+            # TODO: Enable selection of labels to set as true
+            label = 1
+            csv_writer.writerow([label] + [video_id] + [delete_outer_list(f_dict.get('chroma_stft').tolist())]
+                                + [delete_outer_list(f_dict.get('chroma_cqt').tolist())]
+                                + [delete_outer_list(f_dict.get('chroma_cens').tolist())]
+                                + [delete_outer_list(f_dict.get('melspectrogram').tolist())]
+                                + [delete_outer_list(f_dict.get('mfcc').tolist())]
+                                + [delete_outer_list(f_dict.get('rms').tolist())]
+                                + [delete_outer_list(f_dict.get('spectral_centroid').tolist())]
+                                + [delete_outer_list(f_dict.get('spectral_bandwidth').tolist())]
+                                + [delete_outer_list(f_dict.get('spectral_contrast').tolist())]
+                                + [delete_outer_list(f_dict.get('spectral_flatness').tolist())]
+                                + [delete_outer_list(f_dict.get('spectral_rolloff').tolist())]
+                                + [delete_outer_list(f_dict.get('poly_features').tolist())]
+                                + [delete_outer_list(f_dict.get('tonnetz').tolist())]
+                                + [delete_outer_list(f_dict.get('zero_crossing_rate').tolist())])
 
 
 if __name__ == "__main__":
   args = setup_commandline_args()
-  main(args.datasets[0], args.redo)
+  # create_csv_linear(args.datasets[0], args.redo)
+  create_csv_parallel(args.datasets[0], args.redo)
