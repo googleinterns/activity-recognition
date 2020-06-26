@@ -8,14 +8,23 @@ The audio segments are then processed using Librosa to extract features
 
 Usage
 Standalone script:
-python audio_processing.py -d path_to_audioset.csv -l "Gunshot, gunfire"
+python audio_processing.py --src_dir PATH_TO_INPUT_FILES --des_dir DEST_DIR PATH_TO_OUTPUT_FILES_--audioset_csv CSV FILE --labels LABELS --redo BOOLEAN TO REDOWNLOAD THE YOUTUBE FILES
+example:
+python audio_processing.py --src_dir location/lbs/activity/audioset/dataprocessing/example_src_dir --des_dir location/lbs/activity/audioset/dataprocessing/example_dest_dir_--audioset_csv balanced_train_segments --labels "Gunshot, gunfire" --False
 
 Build with bazel:
 bazel build location/lbs/activity/audioset/dataprocessing:audio_processing
-bazel-bin/location/lbs/activity/audioset/dataprocessing/audio_processing -d audioset.csv -l "label"
+bazel-bin/location/lbs/activity/audioset/dataprocessing/audio_processing --src_dir location/lbs/activity/audioset/dataprocessing/example_src_dir --des_dir location/lbs/activity/audioset/dataprocessing/example_dest_dir_--audioset_csv balanced_train_segments --labels "Gunshot, gunfire" --False
 
-Any label included in the AudioSet dataset can be used (i.e "Gunshot, gunfire")
 
+--src_dir is the path to the directory containing the input files
+(audioset csv file ontology.json)
+--dest_dir is the path to the directory containing the output files
+(output csv file)
+--labels included in the AudioSet dataset can be used (i.e "Gunshot, gunfire")
+
+Performance: to confirm the presence of, extract features from, and output to a
+    csv file, takes about ___minutes for around 20,000 samples.
 """
 
 from __future__ import unicode_literals
@@ -27,80 +36,159 @@ import os
 import shutil
 from os import listdir
 from os.path import isfile, join
-import sys
-import numpy as np
 import librosa
-import argparse
+from absl import app
+from absl import flags
+from absl import logging
+import datetime
 
-file_structure = "python/location/lbs/activity/audioset/dataprocessing/"
-referDoc = "ReferDoc/"
-downloaded_audio = []
-feature_dict = {}
-
-
-def setup_commandline_args():
-    parser = argparse.ArgumentParser(description='Process dataset.csv to input into TensorFlow.')
-    parser.add_argument('-d', '--datasets', required=True, type=str, nargs='+')
-    parser.add_argument('-r', '--redo', action='store_true', required=False)
-    parser.add_argument('-l', '--labels', required=True, type=str, nargs='+')
-    args = parser.parse_args()
-    print(args)
-    return args
+FLAGS = flags.FLAGS
 
 
-def parse_csv(csv_file):
-    # Extract all labeled audio info from csv
-    # input: str csv_file
-    # output: list audio_list
+def setup_abseil():
+    """Sets up command line arguments using Abseil.
+
+    Defines --audioset_csv, --labels, --redo, --src_dir, and --dest_dir as flags
+    """
+    flags.DEFINE_string('audioset_csv', 'balanced_train_segments',
+                        'The csv file of a dataset provided by the audioset')
+    flags.DEFINE_multi_string('labels', 'Gunshot, gunfire',
+                              'The set of labels identified by the audioset to '
+                              'treat as positive')
+    flags.DEFINE_bool('redo', False,
+                      'Whether to redownload the YouTube videos in the included'
+                      ' csv file')
+    flags.DEFINE_string('src_dir',
+                        'location/lbs/activity/audioset/dataprocessing/example_src_dir',
+                        'The location of the audioset csv file(s) and the '
+                        'ontology.json file')
+    flags.DEFINE_string('dest_dir',
+                        'location/lbs/activity/audioset/dataprocessing/example_dest_dir',
+                        'The location of the csv file and downloaded YouTube '
+                        'videos')
+
+
+def parse_metadata():
+    """Parses metadata and labels from the audioset csv.
+
+    Iterates through the metadata
+
+    Returns:
+        A tuple with the first element being a list of lists containing a
+        video_id, start_time (in seconds), and end_time (in seconds). This list
+        is generated from the inputted csv. The second element is a dictionary
+        with video_id, list of labels key, value pairs
+        For example:
+
+        ([[video_id1, start_time1, end_time1],
+        [video_id2, start_time2, end_time2],
+        [video_id3, start_time3, end_time3]],
+        {video_id1 : [label1, label3],
+        video_id12: [label2]
+        video_id3 : [label2, label3]})
+    """
+    csv_path = FLAGS.src_dir + '/' + FLAGS.audioset_csv + '.csv'
     audio_list = []
-    with open(csv_file, newline='') as csvfile:
-        info = csv.reader(csvfile, delimiter=' ', quotechar='|')
-        for row in info:
-            r = ','.join(row)
-            if '#' not in r:
-                r_lst = r.split(',')
-                video_id, start_time, end_time = r_lst[0], float(r_lst[2]), float(r_lst[4])
-                audio_list.append([video_id, start_time, end_time])
-    return audio_list
+    label_dict = {}
+    with open(csv_path) as csvfile:
+        csv_rows = csv.reader(csvfile, delimiter=',')
+        for row in csv_rows:
+            if row[0][0] == '#':
+                continue
+            new_row = []
+            for element in row:
+                new_row.append(element.strip())
+            label_list = []
+            count = 0
+            for element in new_row:
+                if count == 0:
+                    video_id = element
+                elif count == 1:
+                    start_time = float(element)
+                elif count == 2:
+                    end_time = float(element)
+                elif count >= 3:
+                    if element[0] == '"':
+                        element = element[1:]
+                    if element[-1] == '"':
+                        element = element[:-1]
+                    label_list.append(element)
+                count += 1
+            audio_list.append([video_id, start_time, end_time])
+            label_dict[video_id] = label_list
+    return audio_list, label_dict
 
 
-def label_id_search(label):
-    # Reads in the label, and finds the corresponding id in ontology.json
-    # input: str label
-    # output: str label_encode
-    with open(referDoc + "ontology.json") as f:
-        labelInfo = json.load(f)
-    for info in labelInfo:
+def label_id_search(src_dir, label):
+    """Translates a label in plain English to the syntax used by audioset
+
+    Searches the ontology.json file in the source directory for the label in
+    plain English and returns its audioset syntax.
+
+    Args:
+        src_dir: Path to a directory where the ontology.json is expected to be
+        label: A label in plain English
+
+    Returns:
+        A string of the label in audioset syntax (the syntax used in the
+        csv file from the audioset).
+    """
+    with open(src_dir + '/' + "ontology.json") as f:
+        label_info = json.load(f)
+    for info in label_info:
         if info["name"] == label:
             return info["id"]
     return None
 
 
-def download_from_list(dest_dir, audio_list, redo):
-    # Download labeled audio segments from given audio_list to a dest folder
-    # input: str dest_dir, list audio_list, str video_id
-    # output: None
+def download_from_list(audio_list, downloaded_audio):
+    """Downloads YouTube videos in an inputted list
+
+    Iterates through the list and downloads each YouTube video unless the video
+    is unavailable or made private. In those cases, is skips over the failed
+    download. For each successful download, the video_id is stored in a list,
+    downloaded_audio.
+
+    Args:
+        audio_list: a list of of YouTube video_ids to download
+        downloaded_audio: a list where successfully downloaded YouTube videos'
+            video_id will be stored.
+    """
     for video_id, start_time, end_time in audio_list:
-        success = download(dest_dir, video_id, redo)
+        success = download(video_id, downloaded_audio)
         if success:
-            chop_audio(dest_dir, video_id, start_time, end_time)
+            chop_audio(video_id, start_time, end_time)
 
 
-def download(dest_dir, video_id, redo):
-    # Download labeled audio from given url to a dest folder
-    # input: str dest_dir, str video_id
-    # output: boolean
+def download(video_id, downloaded_audio):
+    """Downloads a YouTube video using its video_id
+
+    Calls the youtube-dl tool to download a YouTube video by its video_id and
+    convert the video into an audio file. If the download is successful,
+    it stores the video_id in a list, downloaded_video.
+
+    Args:
+        video_id: the video_id of the YouTube video to be downloaded.
+        downloaded_audio: a list where successfully downloaded YouTube videos'
+            video_id will be stored.
+
+    Returns:
+        A boolean of whether the download was successful or not. Returns false
+        if the video was already downloaded and redo is False.
+    """
     try:
-        os.mkdir(dest_dir)
+        os.mkdir(FLAGS.dest_dir)
     except OSError as error:
-        print(error)
+        logging.error(error)
 
-    # check to see if the video_id has already been downloaded and skip the download if it is already
-    # downloaded unless the -r, --redo flag has been passed
-    already_downloaded = isfile(dest_dir + '/sliced_' + video_id + '.wav')
-    print(already_downloaded and not redo)
-    if already_downloaded:  # TODO: implement redo option
-        print('Already processed video')
+    # check to see if the video_id has already been downloaded and skip the
+    # download if it is already downloaded unless the -r, --redo flag has been
+    # passed
+    already_downloaded = isfile(FLAGS.dest_dir + '/yt_videos'
+                                + '/sliced_' + video_id + '.wav')
+    if already_downloaded and not FLAGS.redo:
+        downloaded_audio.append(video_id)
+        logging.info('Already Downloaded')
         return False
 
     ydl_opts = {
@@ -110,189 +198,269 @@ def download(dest_dir, video_id, redo):
             'preferredquality': '192',
         }],
         # Force the file naming of outputs.
-        'outtmpl': dest_dir + '/tmp/' + video_id + '.%(ext)s'
+        'outtmpl': FLAGS.dest_dir + '/tmp/' + video_id + '.%(ext)s'
     }
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         try:
             ydl.download(['https://www.youtube.com/watch?v=' + video_id])
             downloaded_audio.append(video_id)
+            logging.info('Download Complete')
             return True
         except:
-            print('Downloading Failed.')
+            logging.info('Downloading Failed.')
             return False
 
 
-def chop_audio(dest_dir, video_id, start_time, end_time):  # TODO: breaking if there is more than one file in /tmp
-    # Chop the whole audio,
-    # and save only the target part labelled by start_time and end_time.
-    # Then remove the original audio.
-    # input: str video_id, str dest_dir, float start_time, float end_time
-    # output: None
-    onlyfile = [f for f in listdir(dest_dir + '/tmp') if isfile(join(dest_dir + '/tmp', f))][0]
+def chop_audio(video_id, start_time, end_time):
+    """Chops an audio file into a segment by a given start_time and end_time.
+
+    Using a specific start_time and end_time in seconds, it chops the audio file
+    from the downloaded YouTube video, and then removes the original audio file.
+
+    Args:
+        video_id: The video_id of the audio from the downloaded YouTube video.
+        start_time: The start time in seconds of the labelled video segment.
+        end_time: The end time in seconds of the labelled video segment.
+
+    TODO: breaking if there is more than one file in /tmp
+    """
+    onlyfile = [f for f in listdir(FLAGS.dest_dir + '/tmp') if isfile(
+        join(FLAGS.dest_dir + '/tmp', f))][0]
     if onlyfile.endswith('.m4a'):
-        total = AudioSegment.from_file(dest_dir + '/tmp/' + video_id + '.m4a', 'm4a')
+        total = AudioSegment.from_file(
+            FLAGS.dest_dir + '/tmp/' + video_id + '.m4a', 'm4a')
     elif onlyfile.endswith('.opus'):
-        total = AudioSegment.from_file(dest_dir + '/tmp/' + video_id + '.opus', codec='opus')
+        total = AudioSegment.from_file(
+            FLAGS.dest_dir + '/tmp/' + video_id + '.opus', codec='opus')
     else:
-        shutil.rmtree(dest_dir + '/tmp/')
+        shutil.rmtree(FLAGS.dest_dir + '/tmp/')
         return None
     sliced = total[start_time * 1000: end_time * 1000]
-    sliced.export(dest_dir + '/sliced_' + video_id + '.wav', format='wav')
-    shutil.rmtree(dest_dir + '/tmp/')
-    print("chopped audio")
+    sliced.export(FLAGS.dest_dir + '/yt_videos/sliced_' + video_id
+                  + '.wav', format='wav')
+    shutil.rmtree(FLAGS.dest_dir + '/tmp/')
+    logging.info("chopped audio")
 
 
-def extract_features_from_list(src_dir):
-    # Extract features from all downloaded audio segments from given AudioSet csv list
-    # input: str src_dir
-    # output: None
+def extract_features_from_list(downloaded_audio, vid_id_to_features):
+    """Extracts features from each audio file given a list of video_ids.
 
-    # Extract the following features from each downloaded 10 second audio segment using librosa
-    # Extracts the following features: chroma_stft, chroma_cqt, chroma_cens, melspectogram,
-    #                                  mfcc, rms, spectral_centroid, spectral_bandwidth,
-    #                                  spectral_contrast, spectral_flatness, spectral_rolloff,
-    #                                  poly_features, tonnetz, zero_crossing_rate
+    Given a list of video_ids, it extracts features using the Librosa libray
+    from each corresponding audio file and stores the features in a dictionary
+    with a video_id, dictionary key, value pair, with the dictionary value being
+    comprised of feature name, feature list key, value pairs. Using Librosa it
+    extracts the following features: chroma_stft, chroma_cqt, chroma_cens,
+    melspectogram, mfcc, rms, spectral_centroid, spectral_bandwidth,
+    spectral_contrast, spectral_flatness, spectral_rolloff, poly_features,
+    tonnetz, zero_crossing_rate
+
+    Args:
+        downloaded_audio: A list of video_ids of YouTube videos that were
+            successfully downloaded.
+        vid_id_to_features: A dictionary with video_id, dictionary pairs with
+            the dictionary values being feature name, feature list key, value
+            pairs.
+    """
     for video_id in downloaded_audio:
-        extract_features(video_id, src_dir)
+        extract_features(video_id, vid_id_to_features)
 
 
-def extract_features(video_id, src_dir):
-    # Extract features from specified audio segments from given video_id
-    # input: str src_dir
-    # output: boolean
+def extract_features(video_id, vid_id_to_features):
+    """Extracts features from a specific audio file given a video_id.
 
-    # Extract the following features from each downloaded 10 second audio segment using librosa
-    # Extracts the following features: chroma_stft, chroma_cqt, chroma_cens, melspectogram,
-    #                                  mfcc, rms, spectral_centroid, spectral_bandwidth,
-    #                                  spectral_contrast, spectral_flatness, spectral_rolloff,
-    #                                  poly_features, tonnetz, zero_crossing_rate
-    f_dict = {}
-    prefix = "sliced_"
-    suffix = ".wav"
-    if not isfile(src_dir + '/sliced_' + video_id + '.wav'):
+   Given a specific of video_id, it extracts features using the Librosa libray
+   from the corresponding audio file and stores the features in a dictionary
+   with a video_id, dictionary key, value pair, with the dictionary value being
+   comprised of feature name, feature list key, value pairs. Using Librosa it
+   extracts the following features: chroma_stft, chroma_cqt, chroma_cens,
+   melspectogram, mfcc, rms, spectral_centroid, spectral_bandwidth,
+   spectral_contrast, spectral_flatness, spectral_rolloff, poly_features,
+   tonnetz, zero_crossing_rate
+
+   Args:
+       video_id: The video_id of specific audio file from which features are to
+           be extracted.
+       vid_id_to_features: A dictionary with video_id, dictionary pairs with the
+           dictionary values being feature name, feature list key, value pairs.
+
+   Returns:
+       A boolean of whether the extracting features was successful
+   """
+    feature_dict = {}
+    if not isfile(FLAGS.dest_dir + '/yt_videos/sliced_' + video_id + '.wav'):
         return False
-    # extract chroma_stft
-    y, sr = librosa.load(src_dir + "/" + prefix + video_id + suffix)
-    f_dict["chroma_stft"] = librosa.feature.chroma_stft(y, sr)
-    # extract chroma_cqt
-    f_dict["chroma_cqt"] = librosa.feature.chroma_cqt(y, sr)
-    # extract chroma_cens
-    f_dict["chroma_cens"] = librosa.feature.chroma_cens(y, sr)
-    # extract melspectrogram
-    f_dict["melspectrogram"] = librosa.feature.melspectrogram(y, sr)
-    # extract mfcc
-    f_dict["mfcc"] = librosa.feature.mfcc(y, sr)
-    # extract rms
-    f_dict["rms"] = librosa.feature.rms(y)
-    # extract spectral_centroid
-    f_dict["spectral_centroid"] = librosa.feature.spectral_centroid(y, sr)
-    # extract spectral_bandwidth
-    f_dict["spectral_bandwidth"] = librosa.feature.spectral_bandwidth(y, sr)
-    # extract spectral_contrast
-    f_dict["spectral_contrast"] = librosa.feature.spectral_contrast(y, sr)
-    # extract spectral_flatness
-    f_dict["spectral_flatness"] = librosa.feature.spectral_flatness(y)
-    # extract spectral_rolloff
-    f_dict["spectral_rolloff"] = librosa.feature.spectral_rolloff(y, sr)
-    # extract poly_features
-    f_dict["poly_features"] = librosa.feature.poly_features(y, sr)
-    # extract tonnetz
-    f_dict["tonnetz"] = librosa.feature.tonnetz(y, sr)
-    # extract zero_crossing_rate
-    f_dict["zero_crossing_rate"] = librosa.feature.zero_crossing_rate(y, sr)
-    feature_dict[video_id] = f_dict
-    print("extracted features")
+    y, sr = librosa.load(FLAGS.dest_dir + '/yt_videos/sliced_'
+                         + video_id + '.wav')
+    feature_dict["chroma_stft"] = librosa.feature.chroma_stft(y, sr)
+    feature_dict["chroma_cqt"] = librosa.feature.chroma_cqt(y, sr)
+    feature_dict["chroma_cens"] = librosa.feature.chroma_cens(y, sr)
+    feature_dict["melspectrogram"] = librosa.feature.melspectrogram(y, sr)
+    feature_dict["mfcc"] = librosa.feature.mfcc(y, sr)
+    feature_dict["rms"] = librosa.feature.rms(y)
+    feature_dict["spectral_centroid"] = librosa.feature.spectral_centroid(y, sr)
+    feature_dict["spectral_bandwidth"] = librosa.feature.spectral_bandwidth(y,
+                                                                            sr)
+    feature_dict["spectral_contrast"] = librosa.feature.spectral_contrast(y, sr)
+    feature_dict["spectral_flatness"] = librosa.feature.spectral_flatness(y)
+    feature_dict["spectral_rolloff"] = librosa.feature.spectral_rolloff(y, sr)
+    feature_dict["poly_features"] = librosa.feature.poly_features(y, sr)
+    feature_dict["tonnetz"] = librosa.feature.tonnetz(y, sr)
+    feature_dict["zero_crossing_rate"] = librosa.feature.zero_crossing_rate(y,
+                                                                            sr)
+    vid_id_to_features[video_id] = feature_dict
+    logging.info("extracted features")
     return True
 
 
-def create_csv_from_list():
-    # Creates a csv file to input into TensorFlow with the following structure: is_gunshot, video_id, feature list
-    # input: None
-    # output: None
-    with open("tfdataset.csv", 'w', newline='') as outcsv:
-        csv_writer = csv.writer(outcsv, delimiter=':', quoting=csv.QUOTE_MINIMAL)
+def create_csv_from_list(vid_id_to_features, labels_dict):
+    """Creates a csv from a dictionary of video_id, feature dictionary
+
+    Creates a csv file to input into TensorFlow with the following structure:
+    is_gunshot, video_id, feature list.
+
+    Args:
+        vid_id_to_features: A dictionary with video_id, dictionary pairs with
+            the dictionary values being feature name, feature list key,
+            value pairs.
+        labels_dict: a dictionary of video_id list of labels key value pairs
+    """
+    with open(FLAGS.dest_dir + "/tfdataset.csv", 'w') as outcsv:
+        csv_writer = csv.writer(outcsv, delimiter=':',
+                                quoting=csv.QUOTE_MINIMAL)
         csv_writer.writerow(
-            ['label', 'video_id', 'chroma_stft', 'chroma_cqt', 'chroma_cens', 'melspectrogram', 'mfcc', 'rms',
-             'spectral_centroid', 'spectral_bandwidth', 'spectral_contrast', 'spectral_flatness', 'spectral_rolloff',
-             'poly_features', 'tonnetz', 'zero_crossing_rate'])
-        for key in feature_dict:
+            ['label', 'video_id', 'chroma_stft', 'chroma_cqt', 'chroma_cens',
+             'melspectrogram', 'mfcc', 'rms', 'spectral_centroid',
+             'spectral_bandwidth', 'spectral_contrast', 'spectral_flatness',
+             'spectral_rolloff', 'poly_features', 'tonnetz',
+             'zero_crossing_rate'])
+        labels_set = label_list_to_set(FLAGS.labels)
+        for key in vid_id_to_features:
             video_id = key
-            f_dict = feature_dict.get(key)
+            feature_dict = vid_id_to_features.get(key)
             # TODO: Enable selection of labels to set as true
-            label = 1
-            csv_writer.writerow([video_id] + [delete_outer_list(f_dict.get('chroma_stft').tolist())]
-                                + [delete_outer_list(f_dict.get('chroma_cqt').tolist())]
-                                + [delete_outer_list(f_dict.get('chroma_cens').tolist())]
-                                + [delete_outer_list(f_dict.get('melspectrogram').tolist())]
-                                + [delete_outer_list(f_dict.get('mfcc').tolist())]
-                                + [delete_outer_list(f_dict.get('rms').tolist())]
-                                + [delete_outer_list(f_dict.get('spectral_centroid').tolist())]
-                                + [delete_outer_list(f_dict.get('spectral_bandwidth').tolist())]
-                                + [delete_outer_list(f_dict.get('spectral_contrast').tolist())]
-                                + [delete_outer_list(f_dict.get('spectral_flatness').tolist())]
-                                + [delete_outer_list(f_dict.get('spectral_rolloff').tolist())]
-                                + [delete_outer_list(f_dict.get('poly_features').tolist())]
-                                + [delete_outer_list(f_dict.get('tonnetz').tolist())]
-                                + [delete_outer_list(f_dict.get('zero_crossing_rate').tolist())])
+            label = label_selection(labels_dict.get(video_id), labels_set)
+            csv_writer.writerow([label] + [video_id] + [delete_outer_list(
+                feature_dict.get('chroma_stft').tolist())]
+                                + [delete_outer_list(
+                feature_dict.get('chroma_cqt').tolist())]
+                                + [delete_outer_list(
+                feature_dict.get('chroma_cens').tolist())]
+                                + [delete_outer_list(
+                feature_dict.get('melspectrogram').tolist())]
+                                + [delete_outer_list(
+                feature_dict.get('mfcc').tolist())]
+                                + [delete_outer_list(
+                feature_dict.get('rms').tolist())]
+                                + [delete_outer_list(
+                feature_dict.get('spectral_centroid').tolist())]
+                                + [delete_outer_list(
+                feature_dict.get('spectral_bandwidth').tolist())]
+                                + [delete_outer_list(
+                feature_dict.get('spectral_contrast').tolist())]
+                                + [delete_outer_list(
+                feature_dict.get('spectral_flatness').tolist())]
+                                + [delete_outer_list(
+                feature_dict.get('spectral_rolloff').tolist())]
+                                + [delete_outer_list(
+                feature_dict.get('poly_features').tolist())]
+                                + [delete_outer_list(
+                feature_dict.get('tonnetz').tolist())]
+                                + [delete_outer_list(
+                feature_dict.get('zero_crossing_rate').tolist())])
+
+
+def label_selection(labels_list, labels_set):
+    """Returns a 1 if any label in the labels_list is in labels_set else a 0.
+
+    Iterates through the labels_list and returns a 1 if any label is in the
+    labels_set, and returns a 0 otherwise.
+
+    Args:
+        labels_list: a list of labels in the format found in the audioset csv
+        labels_set: a set of labels past in via command line arguments in the
+                    format found in the audioset csv
+
+    Returns:
+        A integer, a 0 or 1, depending on if any label in labels_list is present
+        in labels_set
+    """
+    translated_labels = []
+    for label in labels_list:
+        translated_labels.append(label_id_search(FLAGS.src_dir, label))
+    for label in translated_labels:
+        if label in labels_set:
+            return 1
+        else:
+            return 0
+
+
+def label_list_to_set(translated_labels_list):
+    """Converts a list of labels to a set of labels.
+
+    Converts a list of labels in the format found in the audioset csv to a set
+    of labels, then returns that set.
+
+    Args:
+        translated_labels_list: a list of labels in the format found in the
+            audioset csv passed in as command line arguments
+
+    Returns:
+        A set of labels in the format found in the audioset csv
+    """
+    labels_set = set(translated_labels_list)
+    return labels_set
 
 
 def delete_outer_list(alist):
+    """Removes outer lists from a nested list.
+
+    Removes outer lists from a nested list until the list has more than one
+    element.
+
+    Args:
+        alist: Inputted list from which to remove any unnecessary outer lists.
+
+    Returns:
+        A list with all unnecessary outer lists removed. For example:
+
+        [[1,2,3,4],[1,3,5,2]] or [1,5,3,2,6,9]
+    """
     if len(alist) == 1 and isinstance(alist, list):
         return delete_outer_list(alist[0])
     return alist
 
 
-def create_csv_linear(csv_file, redo):
-    audio_list = parse_csv(file_structure + referDoc + csv_file)
-    download_from_list(file_structure + 'audio_balanced_train', audio_list, redo)
-    extract_features_from_list(file_structure + 'audio_balanced_train')
-    create_csv_from_list()
+def output_csv_linear():
+    """Outputs csv file with a label, metadata, and features from audioset csv.
+
+    Parses the audioset csv, then downloads the YouTube videos and stores the
+    audio from the segment from start time to end time. Then extracts features
+    using Librosa from the successfully downloaded audio and stores the label,
+    video_id, and features in a csv file.
+    """
+    begin_time = datetime.datetime.now()
+    audio_list, label_dict = parse_metadata()
+    downloaded_audio = []
+    download_from_list(audio_list, downloaded_audio)
+    vid_id_to_features = {}
+    extract_features_from_list(downloaded_audio, vid_id_to_features)
+    create_csv_from_list(vid_id_to_features, label_dict)
+    logging.info(datetime.datetime.now() - begin_time)
 
 
-def create_csv_parallel(csv_file, redo):
-    csv_file_temp = file_structure + referDoc + csv_file
-    with open(csv_file_temp, 'r', newline='') as csvfile:
-        with open('tfdataset.csv', 'w', newline='') as outcsv:
-            csv_writer = csv.writer(outcsv, delimiter=':', quoting=csv.QUOTE_MINIMAL)
-            csv_writer.writerow(
-                ['label', 'video_id', 'chroma_stft', 'chroma_cqt', 'chroma_cens', 'melspectrogram', 'mfcc', 'rms',
-                 'spectral_centroid', 'spectral_bandwidth', 'spectral_contrast', 'spectral_flatness',
-                 'spectral_rolloff',
-                 'poly_features', 'tonnetz', 'zero_crossing_rate'])
-            info = csv.reader(csvfile, delimiter=' ', quotechar='|')
-            for row in info:
-                r = ','.join(row)
-                if '#' not in r:  # passes header rows
-                    r_lst = r.split(',')
-                    video_id, start_time, end_time = r_lst[0], float(r_lst[2]), float(r_lst[4])
-                    success = download(file_structure + 'audio_balanced_train', video_id, redo)
-                    if success:
-                        chop_audio(file_structure + 'audio_balanced_train', video_id, start_time, end_time)
-                    success = extract_features(video_id, file_structure + 'audio_balanced_train')
-                    print('Feature Extraction was successful:')
-                    print(success)
-                    if success:
-                        f_dict = feature_dict.get(video_id)
-                        # TODO: Enable selection of labels to set as true
-                        label = 1
-                        csv_writer.writerow(
-                            [label] + [video_id] + [delete_outer_list(f_dict.get('chroma_stft').tolist())]
-                            + [delete_outer_list(f_dict.get('chroma_cqt').tolist())]
-                            + [delete_outer_list(f_dict.get('chroma_cens').tolist())]
-                            + [delete_outer_list(f_dict.get('melspectrogram').tolist())]
-                            + [delete_outer_list(f_dict.get('mfcc').tolist())]
-                            + [delete_outer_list(f_dict.get('rms').tolist())]
-                            + [delete_outer_list(f_dict.get('spectral_centroid').tolist())]
-                            + [delete_outer_list(f_dict.get('spectral_bandwidth').tolist())]
-                            + [delete_outer_list(f_dict.get('spectral_contrast').tolist())]
-                            + [delete_outer_list(f_dict.get('spectral_flatness').tolist())]
-                            + [delete_outer_list(f_dict.get('spectral_rolloff').tolist())]
-                            + [delete_outer_list(f_dict.get('poly_features').tolist())]
-                            + [delete_outer_list(f_dict.get('tonnetz').tolist())]
-                            + [delete_outer_list(f_dict.get('zero_crossing_rate').tolist())])
+def main(argv):
+    """Configures the output location using command line arguments.
+
+    Uses command line arguments to configure this script to output a csv file
+    based on specific source directory and a specified output directory. It also
+    tells the script to redownload the YouTube videos based on the user input.
+
+    Args:
+        argv: A list containing the path this script after the build process.
+    """
+    setup_abseil()
+    output_csv_linear()
 
 
 if __name__ == "__main__":
-    args = setup_commandline_args()
-    # create_csv_linear(args.datasets[0], args.redo)
-    create_csv_parallel(args.datasets[0], args.redo)
+    app.run(main)
