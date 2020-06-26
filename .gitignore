@@ -9,3 +9,12 @@
 # Bazel Generated Files #
 #########################
 bazel*
+
+# Downloaded Audio Files #
+##########################
+*.wav
+
+# I'm not sure why it's here #
+##############################
+__init__*
+*.DS_Store
