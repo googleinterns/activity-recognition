@@ -12,6 +12,3 @@ from shutil import *
 path = 'audioset_v1_embeddings/'
 bal = 'bal_train'
 
-bal_info = pd.read_csv(path + 'tfdatasets.csv')
-bal_info.head()
-
