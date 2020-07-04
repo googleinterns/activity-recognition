@@ -19,6 +19,8 @@ import numpy as np
 
 import vggish_params
 
+import vggish_pca_params
+
 
 class Postprocessor(object):
   """Post-processes VGGish embeddings.
@@ -32,17 +34,16 @@ class Postprocessor(object):
   the same PCA (with whitening) and quantization transformations.
   """
 
-  def __init__(self, pca_params_npz_path):
+  def __init__(self):
     """Constructs a postprocessor.
 
     Args:
       pca_params_npz_path: Path to a NumPy-format .npz file that
         contains the PCA parameters used in postprocessing.
     """
-    params = np.load(pca_params_npz_path)
-    self._pca_matrix = params[vggish_params.PCA_EIGEN_VECTORS_NAME]
+    self._pca_matrix = np.array(vggish_pca_params.pca_eigen_vectors)
     # Load means into a column vector for easier broadcasting later.
-    self._pca_means = params[vggish_params.PCA_MEANS_NAME].reshape(-1, 1)
+    self._pca_means = np.array(vggish_pca_params.pca_means).reshape(-1, 1)
     assert self._pca_matrix.shape == (
         vggish_params.EMBEDDING_SIZE, vggish_params.EMBEDDING_SIZE), (
             'Bad PCA matrix shape: %r' % (self._pca_matrix.shape,))

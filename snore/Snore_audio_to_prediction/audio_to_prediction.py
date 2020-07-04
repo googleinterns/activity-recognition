@@ -23,9 +23,6 @@ flags.DEFINE_string(
     'checkpoint', 'vggish_model.ckpt',
     'Path to the VGGish checkpoint file.')
 
-flags.DEFINE_string(
-    'pca_params', 'vggish_pca_params.npz',
-    'Path to the VGGish PCA parameters file.')
 
 FLAGS = flags.FLAGS
 
@@ -42,7 +39,7 @@ def extract_and_predict(wav):
     examples_batch = vggish_input.wavfile_to_examples(wav_file)
 
     # Prepare a postprocessor to munge the model embeddings.
-    pproc = vggish_postprocess.Postprocessor(FLAGS.pca_params)
+    pproc = vggish_postprocess.Postprocessor()
 
     with tf.Graph().as_default(), tf.Session() as sess:
         # Define the model in inference mode, load the checkpoint, and

@@ -16,7 +16,7 @@
 """Compute input examples for VGGish from audio waveform."""
 
 import numpy as np
-import resampy
+import resampleRE
 
 import mel_features
 import vggish_params
@@ -29,13 +29,13 @@ def wav_read(wav_file):
 
 # try:
 #   import soundfile as sf
-
+#
 #   def wav_read(wav_file):
 #     wav_data, sr = sf.read(wav_file, dtype='int16')
 #     return wav_data, sr
-
+#
 # except ImportError:
-
+#
 #   def wav_read(wav_file):
 #     raise NotImplementedError('WAV file reading requires soundfile package.')
 
@@ -56,13 +56,16 @@ def waveform_to_examples(data, sample_rate):
     spectrogram, covering num_frames frames of audio and num_bands mel frequency
     bands, where the frame length is vggish_params.STFT_HOP_LENGTH_SECONDS.
   """
+  print("Jerry vggish_input.py: start waveform_to_examples()")
   # Convert to mono.
   if len(data.shape) > 1:
     data = np.mean(data, axis=1)
+  print("Jerry vggish_input.py: before resample")
   # Resample to the rate assumed by VGGish.
   if sample_rate != vggish_params.SAMPLE_RATE:
-    data = resampy.resample(data, sample_rate, vggish_params.SAMPLE_RATE)
+    data = resampleRE.resample(data, sample_rate, vggish_params.SAMPLE_RATE)
 
+  print("Jerry vggish_input.py: before log_mel")
   # Compute log mel spectrogram features.
   log_mel = mel_features.log_mel_spectrogram(
       data,
@@ -74,6 +77,8 @@ def waveform_to_examples(data, sample_rate):
       lower_edge_hertz=vggish_params.MEL_MIN_HZ,
       upper_edge_hertz=vggish_params.MEL_MAX_HZ)
 
+  print("Jerry vggish_input.py: after log_mel")
+
   # Frame features into examples.
   features_sample_rate = 1.0 / vggish_params.STFT_HOP_LENGTH_SECONDS
   example_window_length = int(round(
@@ -84,6 +89,8 @@ def waveform_to_examples(data, sample_rate):
       log_mel,
       window_length=example_window_length,
       hop_length=example_hop_length)
+
+  print("Jerry vggish_input.py: finish waveform_to_examples()")
   return log_mel_examples
 
 
@@ -97,6 +104,7 @@ def wavfile_to_examples(wav_file):
   Returns:
     See waveform_to_examples.
   """
+  print("Jerry vggish_input.py: start wavfile_to_examples()")
   wav_data, sr = wav_read(wav_file)
   assert wav_data.dtype == np.int16, 'Bad sample type: %r' % wav_data.dtype
   samples = wav_data / 32768.0  # Convert to [-1.0, +1.0]
