@@ -1,3 +1,11 @@
+# This file is modified from python library "resampy"
+# Used for downsample wav file from 44.1kHz to 16kHz
+# However, cannot be utilized directly in Android Chaquopy
+# for it used stored .npz file and incompatible compilor numba.
+# Modified so now can be used in Android Chaquopy.
+
+# Deprecated for too long execution time.
+
 import numba
 
 import scipy.signal
@@ -41,6 +49,8 @@ def resample(x, sr_orig, sr_new, axis=-1, filter='kaiser_best', **kwargs):
     --------
     '''
 
+    print(x)
+
     print("Jerry resampleRE.py: start resample()")
     if sr_orig <= 0:
         raise ValueError('Invalid sample rate: sr_orig={}'.format(sr_orig))
@@ -77,8 +87,14 @@ def resample(x, sr_orig, sr_new, axis=-1, filter='kaiser_best', **kwargs):
     interp_delta = np.zeros_like(interp_win)
     interp_delta[:-1] = np.diff(interp_win)
     # Construct 2d views of the data with the resampling axis on the first dimension
+    print()
+    print(x)
+    print(x.shape)
     x_2d = x.swapaxes(0, axis).reshape((x.shape[axis], -1))
     y_2d = y.swapaxes(0, axis).reshape((y.shape[axis], -1))
+    print(x_2d)
+    print(x_2d.shape)
+    print()
 
     print("Jerry resampleRE.py: before resample_f()")
     resample_f(x_2d, y_2d, sample_ratio, interp_win, interp_delta, precision)

@@ -23,8 +23,12 @@ import vggish_params
 
 
 from scipy.io import wavfile
+import scipy.signal as sps
+
 def wav_read(wav_file):
     sr, wav_data = wavfile.read(wav_file)
+    print(sr)
+    print(wav_data)
     return wav_data, sr
 
 # try:
@@ -62,8 +66,13 @@ def waveform_to_examples(data, sample_rate):
     data = np.mean(data, axis=1)
   print("Jerry vggish_input.py: before resample")
   # Resample to the rate assumed by VGGish.
-  if sample_rate != vggish_params.SAMPLE_RATE:
-    data = resampleRE.resample(data, sample_rate, vggish_params.SAMPLE_RATE)
+  # if sample_rate != vggish_params.SAMPLE_RATE:
+  #   data = resampleRE.resample(data, sample_rate, vggish_params.SAMPLE_RATE)
+
+  number_of_samples = round(len(data) * float(16000) / 44100)
+  data = sps.resample(data, number_of_samples)
+  print("after resample")
+  print(data.shape)
 
   print("Jerry vggish_input.py: before log_mel")
   # Compute log mel spectrogram features.
@@ -108,4 +117,10 @@ def wavfile_to_examples(wav_file):
   wav_data, sr = wav_read(wav_file)
   assert wav_data.dtype == np.int16, 'Bad sample type: %r' % wav_data.dtype
   samples = wav_data / 32768.0  # Convert to [-1.0, +1.0]
-  return waveform_to_examples(samples, sr)
+  print(samples.shape)
+  # print(len(wav_data))
+
+  tmp = waveform_to_examples(samples, sr)
+  # print(tmp)
+  print(tmp.shape)
+  return tmp
