@@ -2,9 +2,9 @@
 Script to process a csv file from AudioSet into a csv file with features.
 
 Each row of the inputted csv is parsed for the video_id, start_time_seconds,
-end_time_seconds, and labels
-The downloaded audios would be clipped into the labelled 10 seconds segments
-The audio segments are then processed using Librosa to extract features
+end_time_seconds, and labels.
+The downloaded audios would be clipped into the labelled 10-seconds segments.
+The audio segments are then processed using Librosa to extract features.
 
 Usage
 Standalone script:
@@ -12,18 +12,21 @@ python audio_processing.py --src_dir PATH_TO_INPUT_FILES --dest_dir DEST_DIR PAT
 example:
 python audio_processing.py --src_dir location/lbs/activity/audioset/dataprocessing/example_src_dir --dest_dir location/lbs/activity/audioset/dataprocessing/example_dest_dir_--audioset_csv balanced_train_segments --labels "Gunshot, gunfire" --False
 
-Build with bazel:
-bazel build location/lbs/activity/audioset/dataprocessing:audio_processing
-bazel-bin/location/lbs/activity/audioset/dataprocessing/audio_processing --src_dir location/lbs/activity/audioset/dataprocessing/example_src_dir --dest_dir location/lbs/activity/audioset/dataprocessing/example_dest_dir_--audioset_csv balanced_train_segments --labels "Gunshot, gunfire" --False
+    Typical usage example:
 
- --src_dir is the path to the directory containing the input files
-(audioset csv file ontology.json)
---dest_dir is the path to the directory containing the output files
-(output csv file)
---labels included in the AudioSet dataset can be used (i.e "Gunshot, gunfire")
+    Build with bazel:
+    bazel build location/lbs/activity/audioset/dataprocessing:audio_processing
+    bazel-bin/location/lbs/activity/audioset/dataprocessing/audio_processing --src_dir location/lbs/activity/audioset/dataprocessing/example_src_dir --dest_dir location/lbs/activity/audioset/dataprocessing/example_dest_dir_--audioset_csv balanced_train_segments --labels "Gunshot, gunfire" --False
 
-Performance: to confirm the presence of, extract features from, and output to a
-    csv file, takes about 3 hours and ___ minutes for around 20,000 samples.
+    --src_dir is the path to the directory containing the input files
+    (audioset csv file ontology.json)
+    --dest_dir is the path to the directory containing the output files
+    (output csv file)
+    --labels included in the AudioSet dataset can be used
+      (i.e "Gunshot, gunfire")
+
+    Performance: to confirm the presence of, extract features from, and output
+    to a csv file, takes about 3 hours for around 20,000 samples.
 """
 
 from __future__ import unicode_literals
@@ -55,21 +58,33 @@ flags.DEFINE_bool('redo', False,
                   'Whether to redownload the YouTube videos in the included'
                   ' csv file')
 flags.DEFINE_string('src_dir',
-                    'location/lbs/activity/audioset/dataprocessing/example_src_dir',
+                    'location/lbs/activity/audioset/dataprocessing'
+                    '/example_src_dir',
                     'The location of the audioset csv file(s) and the '
                     'ontology.json file')
 flags.DEFINE_string('dest_dir',
-                    'location/lbs/activity/audioset/dataprocessing/example_dest_dir',
-                    'The location of the csv file and downloaded YouTube '
-                    'videos')
+                    'location/lbs/activity/audioset/dataprocessing'
+                    '/example_dest_dir',
+                    'The location of the downloaded YouTube videos and the '
+                    'outputted csv file containing the extracted features '
+                    'and labels')
 flags.DEFINE_bool('scaled', True, 'Whether to average the extracted features')
+
+
+class AudioSetEntry:
+    def __init__(self, video_id, start_time, end_time, labels):
+        self.video_id = video_id
+        self.start_time = start_time
+        self.end_time = end_time
+        self.labels = labels
 
 
 def parse_metadata(src_dir, filename):
     """Parses metadata and labels from the audioset csv.
 
     Iterates through the csv files from audioset and extracts the metadata:
-    video_id, start_time, end_time, and labels
+    video_id, start_time, end_time, and labels, creating an AudioSetEntry object
+    with the metadata as instance data.
 
     Args:
         src_dir: Path to a directory where the audioset csv file is expected to
@@ -77,24 +92,15 @@ def parse_metadata(src_dir, filename):
         filename: A csv file without the .csv file extension
 
     Returns:
-        A tuple with the first element being a list of lists containing a
-        video_id, start_time (in seconds), and end_time (in seconds). This list
-        is generated from the inputted csv. The second element is a dictionary
-        with video_id, list of labels key, value pairs
+        A dictionary with video_id, AudioSetEntry key, value pairs.
         For example:
 
-        ([[video_id1, start_time1, end_time1],
-        [video_id2, start_time2, end_time2],
-        [video_id3, start_time3, end_time3]],
-        {video_id1 : [label1, label3],
-        video_id12: [label2]
-        video_id3 : [label2, label3]})
+        {video_id1: AudioSetEntry1,
+        video_id2: AudioSetEntry2
+        video_id3: AudioSetEntry3}
     """
-    csv_paths = []
     csv_path = join(src_dir, filename + '.csv')
-    audio_list = []
-    label_dict = {}
-    audio_set = set()
+    audio_set_entry_dict = {}
     with open(csv_path) as csv_file:
         csv_rows = csv.reader(csv_file, delimiter=',')
         for row in csv_rows:
@@ -119,34 +125,33 @@ def parse_metadata(src_dir, filename):
                         element = element[:-1]
                     label_list.append(element)
                 count += 1
-            if video_id in audio_set:
+            if audio_set_entry_dict.get(video_id) is not None:
                 continue
-            audio_list.append([video_id, start_time, end_time])
-            label_dict[video_id] = label_list
-            audio_set.add(video_id)
-    return audio_list, label_dict
+            temp = AudioSetEntry(video_id, start_time, end_time, label_list)
+            audio_set_entry_dict[video_id] = temp
+    return audio_set_entry_dict
 
 
-def label_id_search(src_dir, label):
-    """Translates a label in plain English to the syntax used by audioset
+def get_label_dict(src_dir):
+    """Builds a dictionary of plain english labels to labels in audioset syntax.
 
-    Searches the ontology.json file in the source directory for the label in
-    plain English and returns its audioset syntax.
+    Iterates through the ontology.json file in the source directory creating a
+    key, value pair for the labels in plain English and its audioset syntax.
 
     Args:
-        src_dir: Path to a directory where the ontology.json is expected to be
-        label: A label in plain English
+        src_dir: Path to a directory where the ontology.json is expected to be.
 
     Returns:
-        A string of the label in audioset syntax (the syntax used in the
-        csv file from the audioset).
+        A dictionary of plain english labels to labels in audioset syntax.
     """
+    label_dict = {}
     with open(src_dir + '/' + "ontology.json") as f:
-        label_info = json.load(f)
-    for info in label_info:
-        if info["name"] == label:
-            return info["id"]
-    return None
+        label_json = json.load(f)
+    for label in label_json:
+        name = label["name"]
+        id = label["id"]
+        label_dict[name] = id
+    return label_dict
 
 
 def get_failed_downloads(dest_dir):
@@ -172,7 +177,6 @@ def get_failed_downloads(dest_dir):
                 video_id = line.strip()
                 failed_download_set.add(video_id)
     return failed_download_set
-
 
 
 def store_failed_download(dest_dir, video_id):
@@ -210,33 +214,37 @@ def check_dir(dir):
             logging.error(error)
 
 
-def download_from_list(dest_dir, audio_list, downloaded_audio, redo):
+def download_from_list(dest_dir, audio_dict, redo):
     """Downloads YouTube videos in an inputted list
 
     Iterates through the list and downloads each YouTube video unless the video
-    is unavailable or made private. In those cases, is skips over the failed
+    is unavailable or made private. In those cases, it skips over the failed
     download. For each successful download, the video_id is stored in a list,
     downloaded_audio.
 
     Args:
         dest_dir: Path to the parent directory where the downloaded videos are
             to be stored.
-        audio_list: a list of of YouTube video_ids to download
-        downloaded_audio: a list where successfully downloaded YouTube videos'
-            video_id will be stored.
+        audio_dict: A dictionary with video_id, AudioSetEntry key, value pairs
         redo: A boolean of specifying whether to re-download all the YouTube
             videos.
     """
     failed_download_set = get_failed_downloads(dest_dir)
-    for video_id, start_time, end_time in audio_list:
+    failed_downloads = []
+    for video_id, entry in audio_dict.items():
         if video_id in failed_download_set:
+            failed_downloads.append(video_id)
             continue
-        success = download(dest_dir, video_id, downloaded_audio, redo)
+        success = download(dest_dir, video_id, failed_downloads, redo)
+        start_time = entry.start_time
+        end_time = entry.end_time
         if success:
             chop_audio(dest_dir, video_id, start_time, end_time)
+    for video_id in failed_downloads:
+        del audio_dict[video_id]
 
 
-def download(dest_dir, video_id, downloaded_audio, redo):
+def download(dest_dir, video_id, failed_downloads, redo):
     """Downloads a YouTube video using its video_id
 
     Calls the youtube-dl tool to download a YouTube video by its video_id and
@@ -247,7 +255,7 @@ def download(dest_dir, video_id, downloaded_audio, redo):
         dest_dir: Path to the parent directory where the downloaded videos are
             to be stored.
         video_id: the video_id of the YouTube video to be downloaded.
-        downloaded_audio: a list where successfully downloaded YouTube videos'
+        failed_downloads: a list where failed downloaded YouTube videos'
             video_id will be stored.
         redo: A boolean of specifying whether to re-download all the YouTube
             videos.
@@ -263,7 +271,6 @@ def download(dest_dir, video_id, downloaded_audio, redo):
     video_path = join(dest_dir, 'yt_videos', 'sliced_' + video_id + '.wav')
     already_downloaded = isfile(video_path)
     if already_downloaded and not redo:
-        downloaded_audio.append(video_id)
         logging.info('Already Downloaded')
         return False
 
@@ -279,13 +286,11 @@ def download(dest_dir, video_id, downloaded_audio, redo):
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         try:
             ydl.download(['https://www.youtube.com/watch?v=' + video_id])
-            downloaded_audio.append(video_id)
-            print('Download Complete')
             logging.info('Download Complete')
             return True
         except youtube_dl.DownloadError:
             store_failed_download(dest_dir, video_id)
-            print('Download Failed')
+            failed_downloads.append(video_id)
             logging.info('Downloading Failed.')
             return False
 
@@ -304,14 +309,12 @@ def chop_audio(dest_dir, video_id, start_time, end_time):
         end_time: The end time in seconds of the labelled video segment.
     """
     tmp_path = join(dest_dir, 'tmp')
-    print(isdir(tmp_path))
     if isdir(tmp_path):
         length = len(listdir(tmp_path))
         m4a_path = join(tmp_path, video_id + '.m4a')
         opus_path = join(tmp_path, video_id + '.opus')
         ogg_path = join(tmp_path, video_id + '.ogg')
         wav_path = join(dest_dir, 'yt_videos', 'sliced_' + video_id + '.wav')
-        temp_path = ''
         if isfile(m4a_path):
             video = AudioSegment.from_file(m4a_path)
             temp_path = m4a_path
@@ -330,7 +333,6 @@ def chop_audio(dest_dir, video_id, start_time, end_time):
         os.remove(temp_path)
         if length <= 1:
             shutil.rmtree(tmp_path)
-        print('chopped_audio')
         logging.info('chopped_audio')
 
 
@@ -360,8 +362,9 @@ def extract_feature(dest_dir, video_id, feature, scaled):
 
    Raises: ValueError: A feature not supported by Librosa has been inputted.
    """
-    if not isfile(dest_dir + '/yt_videos/sliced_' + video_id + '.wav'):
-        return False
+    path = join(dest_dir, 'yt_videos', 'sliced_' + video_id + '.wav')
+    if not isfile(path):
+        return None
     try:
         # get audio (y) and sampling rate (sr)
         y, sr = librosa.load(dest_dir + '/yt_videos/sliced_'
@@ -385,7 +388,7 @@ def extract_feature(dest_dir, video_id, feature, scaled):
         'tonnetz': librosa.feature.tonnetz,
         'zero_crossing_rate': librosa.feature.zero_crossing_rate
     }
-    odd_ones = set(['rms', 'spectral_flatness'])
+    odd_ones = {'rms', 'spectral_flatness'}
     func = switcher.get(feature)
     if func is None:
         raise ValueError
@@ -395,19 +398,17 @@ def extract_feature(dest_dir, video_id, feature, scaled):
         extracted_feature = func(y, sr)
     if scaled:
         extracted_feature = np.mean(extracted_feature.T, axis=0)
-    print('extracted features')
     logging.info('extracted features')
-    return True
+    return extracted_feature
 
 
-def label_selection(src_dir, labels_list, labels_set):
+def label_selection(labels_list, labels_set):
     """Returns a 1 if any label in the labels_list is in labels_set else a 0.
 
     Iterates through the labels_list and returns a 1 if any label is in the
     labels_set, and returns a 0 otherwise.
 
     Args:
-        src_dir: Path to a directory where the ontology.json is expected to be
         labels_list: a list of labels in the format found in the audioset csv
         labels_set: a set of labels past in via command line arguments in the
                     format found in the audioset csv
@@ -416,17 +417,14 @@ def label_selection(src_dir, labels_list, labels_set):
         A integer, a 0 or 1, depending on if any label in labels_list is present
         in labels_set
     """
-    translated_labels = []
     for label in labels_list:
-        translated_labels.append(label_id_search(src_dir, label))
-    for label in translated_labels:
         if label in labels_set:
             return 1
         else:
             return 0
 
 
-def label_list_to_set(src_dir, labels_list):
+def label_list_to_set(labels_list, label_dict):
     """Converts a list of labels to a set of labels.
 
     Translates a list of plain English labels into the syntax used in the input
@@ -436,13 +434,14 @@ def label_list_to_set(src_dir, labels_list):
     Args:
         labels_list: a list of labels in plain English passed in as
             command line arguments
+        label_dict: a dictionary of plain English labels to audioset syntax.
 
     Returns:
         A set of labels in the format found in the audioset csv
     """
     translated_labels_list = []
     for label in labels_list:
-        translated_labels_list.append(label_id_search(src_dir, label))
+        translated_labels_list.append(label_dict.get(label))
     labels_set = set(translated_labels_list)
     return labels_set
 
@@ -501,7 +500,7 @@ def output_df(src_dir, dest_dir, filename, labels, features_to_extract,
             labels: A list of labels to treat as positive examples.
             features_to_extract: A list of features to extract.
             scaled: A boolean on whether to average the extracted features.
-            redo: A boolean on whether to redownload all the videos.
+            redo: A boolean on whether to re-download all the videos.
 
         Returns:
             A pandas dataframe object with the following format:
@@ -517,14 +516,16 @@ def output_df(src_dir, dest_dir, filename, labels, features_to_extract,
         datasetdf = pd.read_csv(path)
         return datasetdf
     dataset = []
-    labels_set = label_list_to_set(src_dir, labels)
-    audio_list, labels_dict = parse_metadata(src_dir, filename)
+    label_dict = get_label_dict(src_dir)  # plain English to audioset syntax
+    labels_set = label_list_to_set(labels, label_dict)  # user specified labels
+    audio_dict = parse_metadata(src_dir, filename)  # video_id to AudioSetEntry
     count = 0
     vid_count = 0
-    downloaded_audio = []
-    download_from_list(dest_dir, audio_list, downloaded_audio, redo)
-    for video_id in downloaded_audio:
-        label = label_selection(src_dir, labels_dict.get(video_id), labels_set)
+    download_from_list(dest_dir, audio_dict, redo)
+    download_time = datetime.datetime.now() - begin_time
+    logging.info('Time to download: {}'.format(download_time.total_seconds()))
+    for video_id, entry in audio_dict.items():
+        label = label_selection(entry.labels, labels_set)
         if label == 1:
             count += 1
         example = [label]
@@ -534,22 +535,30 @@ def output_df(src_dir, dest_dir, filename, labels, features_to_extract,
             if extracted_feature is None:
                 continue
             example.append(extracted_feature)
-        print(vid_count, datetime.datetime.now() - begin_time)
+        curent_time = (datetime.datetime.now() - begin_time).total_seconds()
+        logging.info((vid_count, curent_time))
         vid_count += 1
         dataset.append(example)
-    print('There are {} positive examples'.format(count))
+    logging.info('There are {} positive examples'.format(count))
+    current_time = datetime.datetime.now() - begin_time
+    extract_time = (current_time - download_time)
+    logging.info(
+        'Time to extract features: {}'.format(extract_time.total_seconds()))
     columns = ['label'] + features_to_extract
     datasetdf = pd.DataFrame(dataset, columns=columns)
+    current_time = datetime.datetime.now() - begin_time
+    df_time = (current_time - extract_time)
+    logging.info('Time to create dataframe: {}'.format(df_time.total_seconds()))
     end_time = datetime.datetime.now()
-    logging.info(end_time - begin_time)
-    print(end_time - begin_time)
+    logging.info('Total time to produce dataframe: {}'.format(
+        (end_time - begin_time).total_seconds()))
     return datasetdf
 
 
 def output_csv(src_dir, dest_dir, filename, labels, features_to_extract,
-              scaled=True, redo=False):
+               scaled=True, redo=False):
     df = output_df(src_dir, dest_dir, filename, labels, features_to_extract,
-              scaled, redo)
+                   scaled, redo)
     df_to_csv(dest_dir, filename, df)
 
 
