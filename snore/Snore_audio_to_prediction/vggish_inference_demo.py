@@ -100,7 +100,7 @@ def main(_):
   print(examples_batch)
 
   # Prepare a postprocessor to munge the model embeddings.
-  pproc = vggish_postprocess.Postprocessor(FLAGS.pca_params)
+  pproc = vggish_postprocess.Postprocessor()
 
   # If needed, prepare a record writer to store the postprocessed embeddings.
   writer = tf.python_io.TFRecordWriter(
