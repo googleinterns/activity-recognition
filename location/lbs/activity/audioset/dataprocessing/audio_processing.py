@@ -49,10 +49,10 @@ import numpy as np
 FLAGS = flags.FLAGS
 flags.DEFINE_string('filename', 'balanced_train_segments',
                     'The csv file of a dataset provided by the audioset')
-flags.DEFINE_multi_string('labels', 'Gunshot, gunfire',
+flags.DEFINE_multi_string('labels', ['Gunshot, gunfire'],
                           'The set of labels identified by the audioset to '
                           'treat as positive')
-flags.DEFINE_multi_string('features', 'mfcc',
+flags.DEFINE_multi_string('features', ['mfcc'],
                           'The set of features to extract from the audio files')
 flags.DEFINE_bool('redo', False,
                   'Whether to redownload the YouTube videos in the included'
@@ -87,6 +87,24 @@ class AudioSetEntry:
         self.start_time = start_time
         self.end_time = end_time
         self.labels = labels
+
+
+class Label:
+    """Class to hold the metadata of each label in the dataset.
+
+    Attributes:
+        name: plain English name of the label.
+        label_id: id of the label as found in the ontology.json file.
+        description: The description of the label.
+        child_ids: a list of the label's children's ids.
+    """
+
+    def __init__(self, name, label_id, description, child_ids):
+        """Inits Label with name, id, description, and child_ids."""
+        self.name = name
+        self.label_id = label_id
+        self.description = description
+        self.child_ids = child_ids
 
 
 def parse_metadata(src_dir, filename):
@@ -128,21 +146,24 @@ def parse_metadata(src_dir, filename):
 
 
 def get_label_dict(src_dir):
-    """Builds a dictionary of ids to labels as seen in the ontology.json file.
+    """Builds a dictionary of label names to Label objects.
 
     Args:
         src_dir: Path to a directory where the ontology.json is expected to be.
 
     Returns:
-        A dictionary of plain english ids to labels as seen in ontology.json.
+        A dictionary of label names to Label objects.
     """
     label_dict = {}
     with open(src_dir + '/' + "ontology.json") as f:
         label_json = json.load(f)
     for label in label_json:
         name = label["name"]
-        id = label["id"]
-        label_dict[name] = id
+        label_id = label["id"]
+        children = label["child_ids"]
+        description = label["description"]
+        label_object = Label(name, label_id, description, children)
+        label_dict[name] = label_object
     return label_dict
 
 
@@ -188,7 +209,7 @@ def store_failed_download(dest_dir, video_id):
         file.write('\n')
 
 
-def check_dir(dir):
+def check_dir(directory):
     """Checks if specified directory exists and creates it if it does not exist.
 
     Checks if a particular directory exists. If the specified directory does not
@@ -196,11 +217,11 @@ def check_dir(dir):
     directory are logged.
 
     Args:
-        dir: Path to a directory that is checked to see if it exists.
+        directory: Path to a directory that is checked to see if it exists.
     """
-    if not isdir(dir):
+    if not isdir(directory):
         try:
-            os.mkdir(dir)
+            os.mkdir(directory)
         except OSError as error:
             logging.error(error)
 
@@ -419,21 +440,22 @@ def label_selection(labels_list, labels_set):
 def label_list_to_set(labels_list, label_dict):
     """Converts a list of labels to a set of labels.
 
-    Translates a list of plain English labels into the syntax used in the input
-    csv file from audioset. Then, converts the translated list of labels to a
-    set of labels, then returns that set.
+    Translates a list of plain English labels names into label ids and adds the
+    child_ids of each label to the list. Then, converts the list of label ids
+    to a set of labels ids and returns that set.
 
     Args:
-        labels_list: a list of labels in plain English passed in as
-            command line arguments
-        label_dict: a dictionary of plain English labels to audioset syntax.
+        labels_list: a list of label names passed in as command line arguments.
+        label_dict: a dictionary of label names to Label objects.
 
     Returns:
         A set of labels in the format found in the audioset csv
     """
     translated_labels_list = []
-    for label in labels_list:
-        translated_labels_list.append(label_dict.get(label))
+    for name in labels_list:
+        translated_labels_list.append(label_dict.get(name).label_id)
+        for label_id in label_dict.get(name).child_ids:
+            translated_labels_list.append(label_id)
     labels_set = set(translated_labels_list)
     return labels_set
 
@@ -570,7 +592,7 @@ def main(argv):
         argv: A list containing the path this script after the build process.
     """
     output_csv(FLAGS.src_dir, FLAGS.dest_dir, FLAGS.filename, FLAGS.labels,
-               FLAGS.features_to_extract, FLAGS.scaled, FLAGS.redo)
+               FLAGS.features, FLAGS.scaled, FLAGS.redo)
 
 
 if __name__ == "__main__":
