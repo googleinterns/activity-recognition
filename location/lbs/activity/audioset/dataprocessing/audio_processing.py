@@ -8,27 +8,27 @@ The audio segments are then processed using Librosa to extract features.
 
 Usage
 Standalone script:
-python audio_processing.py --src_dir PATH_TO_INPUT_FILES --dest_dir DEST_DIR PATH_TO_OUTPUT_FILES_--audioset_csv CSV FILE --labels LABELS --redo BOOLEAN TO REDOWNLOAD THE YOUTUBE FILES
-example:
-python audio_processing.py --src_dir location/lbs/activity/audioset/dataprocessing/example_src_dir --dest_dir location/lbs/activity/audioset/dataprocessing/example_dest_dir_--audioset_csv balanced_train_segments --labels "Gunshot, gunfire" --False
+python audio_processing.py
+    --src_dir PATH_TO_INPUT_FILES --dest_dir PATH_TO_OUTPUT_FILES
+    --filename CSV FILE --labels LABELS
+    --redo BOOLEAN TO REDOWNLOAD THE YOUTUBE FILES
 
-    Typical usage example:
+Example:
+python audio_processing.py
+    --src_dir location/lbs/activity/audioset/dataprocessing/example_src_dir
+    --dest_dir location/lbs/activity/audioset/dataprocessing/example_dest_dir
+    --filename balanced_train_segments --labels "Gunshot, gunfire" --False
 
-    Build with bazel:
-    bazel build location/lbs/activity/audioset/dataprocessing:audio_processing
-    bazel-bin/location/lbs/activity/audioset/dataprocessing/audio_processing --src_dir location/lbs/activity/audioset/dataprocessing/example_src_dir --dest_dir location/lbs/activity/audioset/dataprocessing/example_dest_dir_--audioset_csv balanced_train_segments --labels "Gunshot, gunfire" --False
-
-    --src_dir is the path to the directory containing the input files
-    (audioset csv file ontology.json)
-    --dest_dir is the path to the directory containing the output files
-    (output csv file)
-    --labels included in the AudioSet dataset can be used
-      (i.e "Gunshot, gunfire")
+Typical usage example (Bazel):
+bazel build location/lbs/activity/audioset/dataprocessing:audio_processing
+bazel-bin/location/lbs/activity/audioset/dataprocessing/audio_processing
+    --src_dir location/lbs/activity/audioset/dataprocessing/example_src_dir
+    --dest_dir location/lbs/activity/audioset/dataprocessing/example_dest_dir
+    --audioset_csv balanced_train_segments --labels "Gunshot, gunfire" --False
 
     Performance: to confirm the presence of, extract features from, and output
     to a csv file, takes about 3 hours for around 20,000 samples.
 """
-
 from __future__ import unicode_literals
 import youtube_dl
 import csv
@@ -72,7 +72,17 @@ flags.DEFINE_bool('scaled', True, 'Whether to average the extracted features')
 
 
 class AudioSetEntry:
+    """Class to hold the metadata of each example in the dataset.
+
+    Attributes:
+        video_id: video id of the YouTube video.
+        start_time: start time in seconds of the labelled segment.
+        end_time: end time in seconds of the labelled segment.
+        labels: list of labels that the audio segment is classified by.
+    """
+
     def __init__(self, video_id, start_time, end_time, labels):
+        """Inits AudioSetEntry with video_id, start and end times, labels."""
         self.video_id = video_id
         self.start_time = start_time
         self.end_time = end_time
@@ -93,56 +103,38 @@ def parse_metadata(src_dir, filename):
 
     Returns:
         A dictionary with video_id, AudioSetEntry key, value pairs.
-        For example:
-
-        {video_id1: AudioSetEntry1,
-        video_id2: AudioSetEntry2
-        video_id3: AudioSetEntry3}
     """
     csv_path = join(src_dir, filename + '.csv')
-    audio_set_entry_dict = {}
+    audio_dict = {}
     with open(csv_path) as csv_file:
-        csv_rows = csv.reader(csv_file, delimiter=',')
+        fieldnames = ['video_id', 'start_time', 'end_time']
+        csv_rows = csv.DictReader(filter(lambda row: row[0] != '#', csv_file),
+                                  fieldnames=fieldnames)
         for row in csv_rows:
-            if row[0][0] == '#':
-                continue
-            new_row = []
-            for element in row:
-                new_row.append(element.strip())
             label_list = []
-            count = 0
-            for element in new_row:
-                if count == 0:
-                    video_id = element
-                elif count == 1:
-                    start_time = float(element)
-                elif count == 2:
-                    end_time = float(element)
-                elif count >= 3:
-                    if element[0] == '"':
-                        element = element[1:]
-                    if element[-1] == '"':
-                        element = element[:-1]
-                    label_list.append(element)
-                count += 1
-            if audio_set_entry_dict.get(video_id) is not None:
-                continue
-            temp = AudioSetEntry(video_id, start_time, end_time, label_list)
-            audio_set_entry_dict[video_id] = temp
-    return audio_set_entry_dict
+            video_id = row.get('video_id')
+            start_time = row.get('start_time')
+            end_time = row.get('end_time')
+            for label in row.get(None):
+                label = label.strip()
+                if label[0] == '"':
+                    label = label[1:]
+                if label[-1] == '"':
+                    label = label[:-1]
+                label_list.append(label)
+            audio_dict[video_id] = AudioSetEntry(video_id, start_time, end_time,
+                                                 label_list)
+    return audio_dict
 
 
 def get_label_dict(src_dir):
-    """Builds a dictionary of plain english labels to labels in audioset syntax.
-
-    Iterates through the ontology.json file in the source directory creating a
-    key, value pair for the labels in plain English and its audioset syntax.
+    """Builds a dictionary of ids to labels as seen in the ontology.json file.
 
     Args:
         src_dir: Path to a directory where the ontology.json is expected to be.
 
     Returns:
-        A dictionary of plain english labels to labels in audioset syntax.
+        A dictionary of plain english ids to labels as seen in ontology.json.
     """
     label_dict = {}
     with open(src_dir + '/' + "ontology.json") as f:
@@ -170,8 +162,7 @@ def get_failed_downloads(dest_dir):
     check_dir(dest_dir)
     failed_download_set = set()
     path = join(dest_dir, 'failed_downloads.txt')
-    file_exists = isfile(path)
-    if file_exists:
+    if isfile(path):
         with open(path, 'r') as file:
             for line in file:
                 video_id = line.strip()
@@ -215,12 +206,13 @@ def check_dir(dir):
 
 
 def download_from_list(dest_dir, audio_dict, redo):
-    """Downloads YouTube videos in an inputted list
+    """Downloads and trims YouTube audio to the label start and end time.
 
-    Iterates through the list and downloads each YouTube video unless the video
-    is unavailable or made private. In those cases, it skips over the failed
-    download. For each successful download, the video_id is stored in a list,
-    downloaded_audio.
+    Iterates through the key, value pairs in the dictionary and downloads each
+    YouTube video unless the video is unavailable or made private. In those
+    cases, it skips over the failed download. For each failed download, the
+    video_id is stored in a list, failed_downloads. Then each video_id is
+    removed from the audio_dict dictionary.
 
     Args:
         dest_dir: Path to the parent directory where the downloaded videos are
