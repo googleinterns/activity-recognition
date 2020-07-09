@@ -113,8 +113,8 @@ def parse_metadata(src_dir, filename):
         for row in csv_rows:
             label_list = []
             video_id = row.get('video_id')
-            start_time = row.get('start_time')
-            end_time = row.get('end_time')
+            start_time = float(row.get('start_time').strip())
+            end_time = float(row.get('end_time').strip())
             for label in row.get(None):
                 label = label.strip()
                 if label[0] == '"':
