@@ -2,15 +2,12 @@ import datetime
 import unittest
 from unittest import TestCase
 from ..dataprocessing import audio_processing as ap
-from os import listdir
-from os.path import isfile, isdir
 
 
 class AudioProcessingTest(TestCase):
 
     def test_parse_metadata(self):
         src_dir = 'location/lbs/activity/audioset/dataprocessing/example_src_dir'
-        dest_dir = 'location/lbs/activity/audioset/dataprocessing/example_dest_dir'
         filename = 'balanced_train_segments'
         audio_dict = ap.parse_metadata(src_dir, filename)
 

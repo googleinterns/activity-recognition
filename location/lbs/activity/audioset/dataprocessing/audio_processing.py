@@ -45,6 +45,7 @@ from absl import logging
 import datetime
 import pandas as pd
 import numpy as np
+import multiprocessing as mp
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string('filename', 'balanced_train_segments',
@@ -120,7 +121,7 @@ def parse_metadata(src_dir, filename):
         filename: A csv file without the .csv file extension
 
     Returns:
-        A dictionary with video_id, AudioSetEntry key, value pairs.
+        A dictionary with video_id, AudioSetEntry key-value pairs.
     """
     csv_path = join(src_dir, filename + '.csv')
     audio_dict = {}
@@ -135,13 +136,10 @@ def parse_metadata(src_dir, filename):
             end_time = float(row.get('end_time').strip())
             for label in row.get(None):
                 label = label.strip()
-                if label[0] == '"':
-                    label = label[1:]
-                if label[-1] == '"':
-                    label = label[:-1]
+                label = label.replace('"', '')
                 label_list.append(label)
-            audio_dict[video_id] = AudioSetEntry(video_id, start_time, end_time,
-                                                 label_list)
+            audio_dict[video_id] = AudioSetEntry(
+                video_id, start_time, end_time, label_list)
     return audio_dict
 
 
@@ -229,7 +227,7 @@ def check_dir(directory):
 def download_from_list(dest_dir, audio_dict, redo):
     """Downloads and trims YouTube audio to the label start and end time.
 
-    Iterates through the key, value pairs in the dictionary and downloads each
+    Iterates through the key-value pairs in the dictionary and downloads each
     YouTube video unless the video is unavailable or made private. In those
     cases, it skips over the failed download. For each failed download, the
     video_id is stored in a list, failed_downloads. Then each video_id is
@@ -238,7 +236,7 @@ def download_from_list(dest_dir, audio_dict, redo):
     Args:
         dest_dir: Path to the parent directory where the downloaded videos are
             to be stored.
-        audio_dict: A dictionary with video_id, AudioSetEntry key, value pairs
+        audio_dict: A dictionary with video_id, AudioSetEntry key-value pairs
         redo: A boolean of specifying whether to re-download all the YouTube
             videos.
     """
@@ -255,6 +253,49 @@ def download_from_list(dest_dir, audio_dict, redo):
             chop_audio(dest_dir, video_id, start_time, end_time)
     for video_id in failed_downloads:
         del audio_dict[video_id]
+
+
+def download_from_list_parallel(dest_dir, audio_dict, redo):
+    """Downloads and trims YouTube audio to the label start and end time.
+
+    Iterates through the key-value pairs in the dictionary and downloads each
+    YouTube video unless the video is unavailable or made private. In those
+    cases, it skips over the failed download. For each failed download, the
+    video_id is stored in a list, failed_downloads. Then each video_id is
+    removed from the audio_dict dictionary.
+
+    Args:
+        dest_dir: Path to the parent directory where the downloaded videos are
+            to be stored.
+        audio_dict: A dictionary with video_id, AudioSetEntry key-value pairs
+        redo: A boolean of specifying whether to re-download all the YouTube
+            videos.
+    """
+    print('starting parallel function')
+    failed_download_set = get_failed_downloads(dest_dir)
+    with mp.Manager() as manager:
+        failed_downloads = manager.list()
+        to_download_list = []
+        for video_id, entry in audio_dict.items():
+            if video_id in failed_download_set:
+                failed_downloads.append(video_id)
+                continue
+            to_download_list.append((dest_dir, video_id, failed_downloads, redo))
+        print('opening download pool')
+        pool = mp.Pool()
+        success_list = pool.starmap(download, to_download_list)
+        pool.close()
+        for video_id in failed_downloads:
+            del audio_dict[video_id]
+        chop_audio_list = []
+        print('chopping video')
+        for success, entry in zip(success_list, audio_dict.values()):
+            if success:
+               chop_audio_list.append(
+                   (dest_dir, entry.video_id, entry.start_time, entry.end_time))
+        pool = mp.Pool()
+        pool.starmap(chop_audio, chop_audio_list)
+        pool.close()
 
 
 def download(dest_dir, video_id, failed_downloads, redo):
@@ -296,6 +337,7 @@ def download(dest_dir, video_id, failed_downloads, redo):
         # Force the file naming of outputs.
         'outtmpl': join(dest_dir, 'tmp', video_id + '.%(ext)s')
     }
+    print('downloading video')
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         try:
             ydl.download(['https://www.youtube.com/watch?v=' + video_id])
@@ -352,10 +394,10 @@ def chop_audio(dest_dir, video_id, start_time, end_time):
 def extract_feature(dest_dir, video_id, feature, scaled):
     """Extracts a feature from a specific audio file given a video_id.
 
-   Given a specific of video_id, it extracts features using the Librosa libray
+   Given a specific of video_id, it extracts features using the Librosa library
    from the corresponding audio file and stores the features in a dictionary
-   with a video_id, dictionary key, value pair, with the dictionary value being
-   comprised of feature name, feature list key, value pairs. Using Librosa it
+   with a video_id, dictionary key-value pair, with the dictionary value being
+   comprised of feature name, feature list key-value pairs. Using Librosa it
    extracts one of the following features: chroma_stft, chroma_cqt, chroma_cens,
    melspectogram, mfcc, rms, spectral_centroid, spectral_bandwidth,
    spectral_contrast, spectral_flatness, spectral_rolloff, poly_features,
@@ -367,7 +409,7 @@ def extract_feature(dest_dir, video_id, feature, scaled):
        video_id: The video_id of specific audio file from which features are to
            be extracted.
        feature: A dictionary with video_id, dictionary pairs with the
-           dictionary values being feature name, feature list key, value pairs.
+           dictionary values being feature name, feature list key-value pairs.
        scaled: whether the extracted feature should be averaged
 
    Returns:
@@ -401,21 +443,21 @@ def extract_feature(dest_dir, video_id, feature, scaled):
         'tonnetz': librosa.feature.tonnetz,
         'zero_crossing_rate': librosa.feature.zero_crossing_rate
     }
-    odd_ones = {'rms', 'spectral_flatness'}
-    func = switcher.get(feature)
-    if func is None:
+    sample_rate_void_feature_names = {'rms', 'spectral_flatness'}
+    feature_extraction_func = switcher.get(feature)
+    if feature_extraction_func is None:
         raise ValueError
-    if feature in odd_ones:
-        extracted_feature = func(y)
+    if feature in sample_rate_void_feature_names:
+        extracted_feature = feature_extraction_func(y)
     else:
-        extracted_feature = func(y, sr)
+        extracted_feature = feature_extraction_func(y, sr)
     if scaled:
         extracted_feature = np.mean(extracted_feature.T, axis=0)
     logging.info('extracted features')
     return extracted_feature
 
 
-def label_selection(labels_list, labels_set):
+def is_positive_example(labels_list, labels_set):
     """Returns a 1 if any label in the labels_list is in labels_set else a 0.
 
     Iterates through the labels_list and returns a 1 if any label is in the
@@ -432,9 +474,9 @@ def label_selection(labels_list, labels_set):
     """
     for label in labels_list:
         if label in labels_set:
-            return 1
+            return True
         else:
-            return 0
+            return False
 
 
 def label_list_to_set(labels_list, label_dict):
@@ -535,17 +577,14 @@ def output_df(src_dir, dest_dir, filename, labels, features_to_extract,
     audio_dict = parse_metadata(src_dir, filename)  # video_id to AudioSetEntry
     count = 0
     vid_count = 0
-    download_from_list(dest_dir, audio_dict, redo)
+    download_from_list_parallel(dest_dir, audio_dict, redo)
     download_time = datetime.datetime.now() - begin_time
     logging.info('Time to download: {}'.format(download_time.total_seconds()))
     for video_id, entry in audio_dict.items():
-        label = label_selection(entry.labels, labels_set)
-        if label == 1:
-            count += 1
-        example = [label]
+        example = [1 if is_positive_example(entry.labels, labels_set) else 0]
         for feature in features_to_extract:
-            extracted_feature = extract_feature(dest_dir, video_id, feature,
-                                                scaled)
+            extracted_feature = extract_feature(
+                dest_dir, video_id, feature, scaled)
             if extracted_feature is None:
                 continue
             example.append(extracted_feature)
