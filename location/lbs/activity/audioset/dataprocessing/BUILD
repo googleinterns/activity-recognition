@@ -8,3 +8,14 @@ py_binary(
    "//location/lbs/activity/audioset/dataprocessing:example_src_dir/ontology.json",
    "//location/lbs/activity/audioset/dataprocessing:example_src_dir/unbalanced_train_segments.csv"],
 )
+
+py_library(
+  name = "audioset_helper",
+  srcs = ["audioset_helper.py"],
+)
+
+py_library(
+  name = "downloader",
+  srcs = ["downloader.py"],
+)
+
