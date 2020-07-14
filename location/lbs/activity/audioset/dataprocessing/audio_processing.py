@@ -101,7 +101,7 @@ def extract_feature(dest_dir, video_id, feature, scaled):
                              + video_id + '.wav')
     except ValueError as error:
         logging.error(error)
-        return False
+        return None
     switcher = {
         'chroma_stft': librosa.feature.chroma_stft,
         'chroma_cqt': librosa.feature.chroma_cqt,
