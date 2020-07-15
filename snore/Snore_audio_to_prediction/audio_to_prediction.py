@@ -31,15 +31,18 @@ saved_model_path = 'saved_model/0001'
 
 
 def main():
-	extract_and_predict('test.wav')
+    # wav_path = '../audio_prep/audio_eval/sliced_1-TnkdEPXEw.wav'
+    wav_path = 'test.wav'
+    extract_and_predict(wav_path)
 
 
 def extract_and_predict(wav):
     wav_file = wav
     examples_batch = vggish_input.wavfile_to_examples(wav_file)
+    print(examples_batch)
 
     # Prepare a postprocessor to munge the model embeddings.
-    pproc = vggish_postprocess.Postprocessor()
+    # pproc = vggish_postprocess.Postprocessor()
 
     with tf.Graph().as_default(), tf.Session() as sess:
         # Define the model in inference mode, load the checkpoint, and
@@ -54,7 +57,7 @@ def extract_and_predict(wav):
         # Run inference and postprocessing.
         [embedding_batch] = sess.run([embedding_tensor],
                                     feed_dict={features_tensor: examples_batch})
-        postprocessed_batch = pproc.postprocess(embedding_batch)
+        postprocessed_batch = vggish_postprocess.postprocess(embedding_batch)
         postprocessed_batch = [postprocessed_batch[i] for i in range(len(postprocessed_batch))]
     pred_each_n_seconds = predict_with_saved_model(postprocessed_batch)
     print( str(pred_each_n_seconds))

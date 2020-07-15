@@ -2,7 +2,7 @@
 # The downloaded audios would be clipped into 10 seconds periods
 # Stored in eval_segments, balanced_train, and unblalanced_train separately.
 
-# Usage: python3 audio_prep.py <label>
+# Usage: python3 audio_prep.py Snoring
 
 
 from __future__ import unicode_literals
