@@ -6,6 +6,9 @@
 This is a sample android app that utilizes snoring detection model to measure and track snoring.
 It allows user to record and predict snoring that returns a list of snoring confidence score.
 
+#### Note: 
+This is pre-mature version, which integrates python codes in app using Chaquopy. Because of this third party library, limitations may apply.
+
 <br>
 
 In order to have this working, you need to download [vggish_feature_extraction_model.tflite](https://drive.google.com/file/d/10YgZ48mMkdLgJ_wzsMqG5nnNOZs9mkaC/view?usp=sharing) into app/src/main/assets folder.
