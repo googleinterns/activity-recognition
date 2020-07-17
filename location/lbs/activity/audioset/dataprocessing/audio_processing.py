@@ -37,7 +37,6 @@ from absl import flags
 from absl import logging
 import datetime
 import pandas as pd
-import numpy as np
 import audioset_helper
 import downloader
 
@@ -63,10 +62,8 @@ flags.DEFINE_string('dest_dir',
                     'The location of the downloaded YouTube videos and the '
                     'outputted csv file containing the extracted features '
                     'and labels')
-flags.DEFINE_bool('scaled', True, 'Whether to average the extracted features')
 
-
-def extract_feature(dest_dir, video_id, feature, scaled):
+def extract_feature(dest_dir, video_id, feature):
     """Extracts a feature from a specific audio file given a video_id.
 
    Given a specific of video_id, it extracts features using the Librosa library
@@ -85,7 +82,6 @@ def extract_feature(dest_dir, video_id, feature, scaled):
            be extracted.
        feature: A dictionary with video_id, dictionary pairs with the
            dictionary values being feature name, feature list key-value pairs.
-       scaled: whether the extracted feature should be averaged
 
    Returns:
        A boolean of whether the extracting features was successful
@@ -126,8 +122,6 @@ def extract_feature(dest_dir, video_id, feature, scaled):
         extracted_feature = feature_extraction_func(y)
     else:
         extracted_feature = feature_extraction_func(y, sr)
-    if scaled:
-        extracted_feature = np.mean(extracted_feature.T, axis=0)
     logging.info('extracted features')
     return extracted_feature
 
@@ -154,43 +148,23 @@ def is_positive_example(labels_list, labels_set):
             return False
 
 
-def delete_outer_list(alist):
-    """Removes outer lists from a nested list.
-
-    Removes outer lists from a nested list until the list has more than one
-    element.
-
-    Args:
-        alist: Inputted list from which to remove any unnecessary outer lists.
-
-    Returns:
-        A list with all unnecessary outer lists removed. For example:
-
-        [[1,2,3,4],[1,3,5,2]] or [1,5,3,2,6,9]
-    """
-    if len(alist) == 1 and isinstance(alist, list):
-        return delete_outer_list(alist[0])
-    return alist
-
-
 def print_flags():
     """Prints out the flags inputted via command line arguments.
 
     Prints a filename, a list of labels, the redo boolean, a source
-    directory, a destination directory, the scaled boolean, and a list of
-    features, based on the command line input or their default values.
+    directory, a destination directory, and a list of features, based on the
+    command line input or their default values.
     """
     print(FLAGS.filename)
     print(FLAGS.labels)
     print(FLAGS.redo)
     print(FLAGS.src_dir)
     print(FLAGS.dest_dir)
-    print(FLAGS.scaled)
     print(FLAGS.features)
 
 
 def output_df(src_dir, dest_dir, filename, labels, features_to_extract,
-              scaled=True, redo=False):
+              redo=False):
     """Creates dataframe object from inputted csv files, features, and labels.
 
         Parses through a csv file and extracts all the metadata from it. Then
@@ -207,7 +181,6 @@ def output_df(src_dir, dest_dir, filename, labels, features_to_extract,
             filename: Name of the audioset csv file not including '.csv'
             labels: A list of labels to treat as positive examples.
             features_to_extract: A list of features to extract.
-            scaled: A boolean on whether to average the extracted features.
             redo: A boolean on whether to re-download all the videos.
 
         Returns:
@@ -219,10 +192,6 @@ def output_df(src_dir, dest_dir, filename, labels, features_to_extract,
             0       [1, 3, 5]  [1, 4, 5]  ...
         """
     begin_time = datetime.datetime.now()
-    path = join(dest_dir, filename + '_features.csv')
-    if isfile(path) and not redo:
-        datasetdf = pd.read_csv(path)
-        return datasetdf
     dataset = []
     label_dict = audioset_helper.get_label_dict(src_dir)
     labels_set = audioset_helper.label_list_to_set(labels, label_dict)
@@ -237,7 +206,7 @@ def output_df(src_dir, dest_dir, filename, labels, features_to_extract,
         count += 1 if example[0] == 1 else 0
         for feature in features_to_extract:
             extracted_feature = extract_feature(
-                dest_dir, video_id, feature, scaled)
+                dest_dir, video_id, feature)
             if extracted_feature is None:
                 continue
             example.append(extracted_feature)
@@ -261,30 +230,20 @@ def output_df(src_dir, dest_dir, filename, labels, features_to_extract,
     return datasetdf
 
 
-def output_csv(src_dir, dest_dir, filename, labels, features_to_extract,
-               scaled=True, redo=False):
-    df = output_df(src_dir, dest_dir, filename, labels, features_to_extract,
-                   scaled, redo)
-    df_to_csv(dest_dir, filename, df)
-
-
-def df_to_csv(dest_dir, filename, dataframe):
-    path = join(dest_dir, filename + '_features.csv')
-    dataframe.to_csv(path)
-
-
 def main(argv):
     """Configures the output location using command line arguments.
 
-    Uses command line arguments to configure this script to output a csv file
+    Uses command line arguments to configure this script to output a Dataframe
     based on specific source directory and a specified output directory. It also
     tells the script to redownload the YouTube videos based on the user input.
+    The script finally prints out the Dataframe object.
 
     Args:
         argv: A list containing the path this script after the build process.
     """
-    output_csv(FLAGS.src_dir, FLAGS.dest_dir, FLAGS.filename, FLAGS.labels,
-               FLAGS.features, FLAGS.scaled, FLAGS.redo)
+    df = output_df(FLAGS.src_dir, FLAGS.dest_dir, FLAGS.filename, FLAGS.labels,
+               FLAGS.features, FLAGS.redo)
+    print(df)
 
 
 if __name__ == "__main__":

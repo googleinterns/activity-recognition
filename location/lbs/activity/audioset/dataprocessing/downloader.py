@@ -33,7 +33,7 @@ def download_from_list(dest_dir, audio_dict, redo):
     failed_download_set = get_failed_downloads(dest_dir)
     failed_downloads = []
     for video_id, entry in audio_dict.items():
-        if video_id in failed_download_set:
+        if video_id in failed_download_set and not redo:
             failed_downloads.append(video_id)
             continue
         success = download(dest_dir, video_id, failed_downloads, redo)
