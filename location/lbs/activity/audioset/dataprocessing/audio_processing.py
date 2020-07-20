@@ -31,11 +31,11 @@ bazel-bin/location/lbs/activity/audioset/dataprocessing/audio_processing
 """
 from __future__ import unicode_literals
 from os.path import isfile, join
+import datetime
 import librosa
 from absl import app
 from absl import flags
 from absl import logging
-import datetime
 import pandas as pd
 import audioset_helper
 import downloader
@@ -62,6 +62,23 @@ flags.DEFINE_string('dest_dir',
                     'The location of the downloaded YouTube videos and the '
                     'outputted csv file containing the extracted features '
                     'and labels')
+
+def main(argv):
+    """Configures the output location using command line arguments.
+
+    Uses command line arguments to configure this script to output a Dataframe
+    based on specific source directory and a specified output directory. It also
+    tells the script to redownload the YouTube videos based on the user input.
+    The script finally prints out the Dataframe object.
+
+    Args:
+        argv: A list containing the path this script after the build process.
+    """
+    dataframe = output_df(
+        FLAGS.src_dir, FLAGS.dest_dir, FLAGS.filename, FLAGS.labels,
+        FLAGS.features, FLAGS.redo)
+    print(dataframe)
+
 
 def extract_feature(dest_dir, video_id, feature):
     """Extracts a feature from a specific audio file given a video_id.
@@ -92,13 +109,13 @@ def extract_feature(dest_dir, video_id, feature):
     if not isfile(path):
         return None
     try:
-        # get audio (y) and sampling rate (sr)
-        y, sr = librosa.load(dest_dir + '/yt_videos/sliced_'
-                             + video_id + '.wav')
+        # get audio and sampling rate
+        audio, sampling_rate = librosa.load(
+            dest_dir + '/yt_videos/sliced_' + video_id + '.wav')
     except ValueError as error:
         logging.error(error)
         return None
-    switcher = {
+    feature_name_dict = {
         'chroma_stft': librosa.feature.chroma_stft,
         'chroma_cqt': librosa.feature.chroma_cqt,
         'chroma_cens': librosa.feature.chroma_cens,
@@ -115,13 +132,13 @@ def extract_feature(dest_dir, video_id, feature):
         'zero_crossing_rate': librosa.feature.zero_crossing_rate
     }
     sample_rate_void_feature_names = {'rms', 'spectral_flatness'}
-    feature_extraction_func = switcher.get(feature)
+    feature_extraction_func = feature_name_dict.get(feature)
     if feature_extraction_func is None:
         raise ValueError
     if feature in sample_rate_void_feature_names:
-        extracted_feature = feature_extraction_func(y)
+        extracted_feature = feature_extraction_func(audio)
     else:
-        extracted_feature = feature_extraction_func(y, sr)
+        extracted_feature = feature_extraction_func(audio, sampling_rate)
     logging.info('extracted features')
     return extracted_feature
 
@@ -144,8 +161,7 @@ def is_positive_example(labels_list, labels_set):
     for label in labels_list:
         if label in labels_set:
             return True
-        else:
-            return False
+        return False
 
 
 def print_flags():
@@ -199,8 +215,10 @@ def output_df(src_dir, dest_dir, filename, labels, features_to_extract,
     count = 0
     vid_count = 0
     downloader.download_from_list(dest_dir, audio_dict, redo)
-    download_time = datetime.datetime.now() - begin_time
-    logging.info('Time to download: {}'.format(download_time.total_seconds()))
+    download_finish_time = datetime.datetime.now()
+    download_duration = download_finish_time - begin_time
+    logging.info(
+        'Time to download: {}'.format(download_duration.total_seconds()))
     for video_id, entry in audio_dict.items():
         example = [1 if is_positive_example(entry.labels, labels_set) else 0]
         count += 1 if example[0] == 1 else 0
@@ -210,40 +228,26 @@ def output_df(src_dir, dest_dir, filename, labels, features_to_extract,
             if extracted_feature is None:
                 continue
             example.append(extracted_feature)
-        current_time = (datetime.datetime.now() - begin_time).total_seconds()
-        logging.info((vid_count, current_time))
+        elapsed_seconds = (datetime.datetime.now() - begin_time).total_seconds()
+        logging.info((vid_count, elapsed_seconds))
         vid_count += 1
         dataset.append(example)
     logging.info('There are {} positive examples'.format(count))
-    current_time = datetime.datetime.now() - begin_time
-    extract_time = (current_time - download_time)
-    logging.info(
-        'Time to extract features: {}'.format(extract_time.total_seconds()))
+    feature_extraction_finish_time = datetime.datetime.now()
+    feature_extract_duration = (feature_extraction_finish_time -
+                                download_finish_time)
+    logging.info('Time to extract features: {}'.format(
+        feature_extract_duration.total_seconds()))
     columns = ['label'] + features_to_extract
     datasetdf = pd.DataFrame(dataset, columns=columns)
-    current_time = datetime.datetime.now() - begin_time
-    df_time = (current_time - extract_time)
-    logging.info('Time to create dataframe: {}'.format(df_time.total_seconds()))
+    dataframe_finish_time = datetime.datetime.now()
+    dateframe_duration = (dataframe_finish_time - feature_extract_duration)
+    logging.info('Time to create dataframe: {}'.format(
+        dateframe_duration.total_seconds()))
     end_time = datetime.datetime.now()
     logging.info('Total time to produce dataframe: {}'.format(
         (end_time - begin_time).total_seconds()))
     return datasetdf
-
-
-def main(argv):
-    """Configures the output location using command line arguments.
-
-    Uses command line arguments to configure this script to output a Dataframe
-    based on specific source directory and a specified output directory. It also
-    tells the script to redownload the YouTube videos based on the user input.
-    The script finally prints out the Dataframe object.
-
-    Args:
-        argv: A list containing the path this script after the build process.
-    """
-    df = output_df(FLAGS.src_dir, FLAGS.dest_dir, FLAGS.filename, FLAGS.labels,
-               FLAGS.features, FLAGS.redo)
-    print(df)
 
 
 if __name__ == "__main__":
