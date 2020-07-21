@@ -1,0 +1,24 @@
+# Compiled Source #
+###################
+*.class
+
+# IDE Generated Files #
+#######################
+*.iml
+
+# Bazel Generated Files #
+#########################
+bazel*
+
+# Downloaded Audio Files #
+##########################
+*.wav
+
+# I'm not sure why it's here #
+##############################
+__init__*
+*.DS_Store
+
+# ingore csv files #
+####################
+*.csv
