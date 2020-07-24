@@ -22,7 +22,7 @@ It allows user to record and predict snoring that returns a list of snoring conf
 
 In order to have this working, you need to download [vggish_feature_extraction_model.tflite](https://drive.google.com/file/d/10YgZ48mMkdLgJ_wzsMqG5nnNOZs9mkaC/view?usp=sharing) into app/src/main/assets folder.
 
-**Apk** could also be downloaded directly from [link](https://drive.google.com/file/d/1SHrmHW1oSOlUO7xv4kW5wPjl9O-wUMBQ/view?usp=sharing).
+**Apk** could also be downloaded directly from [link](https://drive.google.com/file/d/1sAjPSSOwyGP5a2KtwTP0xvBajOOYPzbH/view?usp=sharing).
 
 Please use following command to install apk:
 **adb install -t \<app name>**
