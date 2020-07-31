@@ -111,7 +111,8 @@ def extract_feature(dest_dir, video_id, feature):
     try:
         # get audio and sampling rate
         audio, sampling_rate = librosa.load(
-            dest_dir + '/yt_videos/sliced_' + video_id + '.wav')
+            dest_dir + '/yt_videos/sliced_' + video_id + '.wav',
+            res_type='kaiser_fast')
     except ValueError as error:
         logging.error(error)
         return None
@@ -220,18 +221,21 @@ def output_df(src_dir, dest_dir, filename, labels, features_to_extract,
     logging.info(
         'Time to download: {}'.format(download_duration.total_seconds()))
     for video_id, entry in audio_dict.items():
+        good_data = True
         example = [1 if is_positive_example(entry.labels, labels_set) else 0]
         count += 1 if example[0] == 1 else 0
         for feature in features_to_extract:
             extracted_feature = extract_feature(
                 dest_dir, video_id, feature)
             if extracted_feature is None:
+                good_data = False
                 continue
             example.append(extracted_feature)
         elapsed_seconds = (datetime.datetime.now() - begin_time).total_seconds()
         logging.info((vid_count, elapsed_seconds))
         vid_count += 1
-        dataset.append(example)
+        if good_data:
+            dataset.append(example)
     logging.info('There are {} positive examples'.format(count))
     feature_extraction_finish_time = datetime.datetime.now()
     feature_extract_duration = (feature_extraction_finish_time -
@@ -241,7 +245,7 @@ def output_df(src_dir, dest_dir, filename, labels, features_to_extract,
     columns = ['label'] + features_to_extract
     datasetdf = pd.DataFrame(dataset, columns=columns)
     dataframe_finish_time = datetime.datetime.now()
-    dateframe_duration = (dataframe_finish_time - feature_extract_duration)
+    dateframe_duration = dataframe_finish_time - feature_extraction_finish_time
     logging.info('Time to create dataframe: {}'.format(
         dateframe_duration.total_seconds()))
     end_time = datetime.datetime.now()

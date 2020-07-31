@@ -30,6 +30,10 @@ def download_from_list(dest_dir, audio_dict, redo):
         redo: A boolean of specifying whether to re-download all the YouTube
             videos.
     """
+    if redo:
+        path = join(dest_dir, 'failed_downloads.txt')
+        if isfile(path):
+            os.remove(path)
     failed_download_set = get_failed_downloads(dest_dir)
     failed_downloads = []
     for video_id, entry in audio_dict.items():
