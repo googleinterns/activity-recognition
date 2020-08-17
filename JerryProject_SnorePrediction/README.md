@@ -1,1 +1,3 @@
-This is a snore detection project.
+# Snore Detection
+## Author: Xingjian (Jerry) Wu
+All rights reserved.
