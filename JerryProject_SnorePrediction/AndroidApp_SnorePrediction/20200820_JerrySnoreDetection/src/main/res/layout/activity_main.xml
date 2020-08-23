@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    tools:context=".MainActivity">
+
+    <TextView
+        android:text="Jerry Snore Detection V1.4.0"
+        android:textSize="30sp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
+
+    <TextView
+        android:text="Please reopen app after giving permissions at the first time."
+        android:textSize="10sp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
+
+    <View android:background="#000000"
+        android:layout_width = "match_parent"
+        android:layout_height="1dp"/>
+
+    <TextView
+        android:text="RECORD THEN PREDICT"
+        android:textSize="30sp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
+
+    <Button
+        android:id="@+id/btnStart"
+        android:text="Record"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
+
+    <Button
+        android:id="@+id/btnStop"
+        android:text="Stop Record"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
+
+    <Button
+        android:id="@+id/btnPredict"
+        android:text="Predict"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
+
+    <TextView
+        android:id="@+id/predictText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Waiting..." />
+
+    <View android:background="#000000"
+        android:layout_width = "match_parent"
+        android:layout_height="1dp"/>
+
+    <TextView
+        android:text="LIVE PREDICT"
+        android:textSize="30sp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
+
+    <TextView
+        android:id="@+id/livePredictText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Live Snore Prediction, show snore prediction confidence level." />
+
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="1.0 is 100% snoring, while 0.0 is non-snoring." />
+
+    <Button
+        android:id="@+id/btnLiveStart"
+        android:text="Start"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
+
+    <Button
+        android:id="@+id/btnLiveStop"
+        android:text="Stop"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
+
+
+    <ListView
+        android:id="@+id/list"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:drawSelectorOnTop="false" />
+
+</LinearLayout>
